@@ -3,6 +3,8 @@ import csv
 from pathlib import Path
 from typing import Union
 import numpy as np
+import requests
+import json
 
 from hopp.utilities.keys import get_developer_nrel_gov_key, get_developer_nrel_gov_email
 from hopp.utilities.log import hybrid_logger as logger
@@ -33,6 +35,7 @@ class CambiumData(Resource):
             Default: 'GEA Regions 2023'
             Available:
                 'GEA Regions 2023', 'Nations'
+            Note: 'GEA Regions 2023' should be used for most accurate emissions results
         time_type: (string) time resolution of data
             Default: 'hourly'
             Available:
@@ -44,6 +47,8 @@ class CambiumData(Resource):
         kwargs: additiona keyword arguments
 
     """
+
+    # Define a map between arguments and appropriate naming conventions for defining/identifying resource files
     filename_map = {
         'project_uuid': {'82460f06-548c-4954-b2d9-b84ba92d63e2':'Cambium22',
                          '0f92fe57-3365-428a-8fe8-0afc326b3b43':'Cambium23'},
@@ -58,6 +63,62 @@ class CambiumData(Resource):
         'location_type': {'GEA Regions 2023':'GEA',
                           'Nations':'Nation'},
     }
+
+    ## Define Cambium metrics and mappings needed to pull data from the Cambium API for use in LCA analysis
+    # Long-Run Marginal Emissions Rates
+    lrmer_metric_cols = ['lrmer_co2_c',             # CO2 from direct combustion (kg/MWh)
+                         'lrmer_ch4_c',             # CH4 from direct combustion (g/MWh)
+                         'lrmer_n2o_c',             # N2O from direct combustion (g/MWh)
+                         'lrmer_co2_p',             # CO2 from precombustion (kg/MWh)
+                         'lrmer_ch4_p',             # CH4 from precombustion (g/MWh)
+                         'lrmer_n2o_p',             # N2O from precombustion (g/MWh)
+                         'lrmer_co2e_c',            # CO2 equivalent from direct combustion (CO2, CH4, N2O with 100 year GWP - kg/MWh)
+                         'lrmer_co2e_p',            # CO2 equivalent from precombustion (CO2, CH4, N20 with 100 year GWP - kg/MWh)
+                         'lrmer_co2e'               # CO2 equivalent from combustion and precombustion (== lrmer_co2e_c + lrmer_co2e_p - kg/MWh)
+                        ]
+    # Energy Generation Values
+    gen_metric_cols = ['generation',                # Generation from all technologies (MWh)
+                       'battery_MWh',               # Generation from Electric battery storage (MWh)
+                       'biomass_MWh',               # Generation from Biopower and landfill gas (MWh)
+                       'beccs_MWh',                 # Generation from Biopower with Carbon Capture and Storage (MWh)
+                       'canada_MWh',                # Electricity imported from Canada (MWh)
+                       'coal_MWh',                  # Generation from Coal (pulverized, integrated gasificiation combined cycle, and cofired - MWh)
+                       'coal-ccs_MWh',              # Generation from Coal with Carbon Capture and Storage (MWh)
+                       'csp_MWh',                   # Generation from Concentrating Solar Power with and without thermal storage (MWh)
+                       'distpv_MWh',                # Generation from customer-sited Rooftop PV (MWh)
+                       'gas-cc_MWh',                # Generation from Natural Gas Combined Cycle (MWh)
+                       'gas-cc-ccs_MWh',            # Generation from Natural Gas Combined Cycle with Carbon Capture and Storage (MWh)
+                       'gas-ct_MWh',                # Generation from Natural Gas Combustion Turbine (MWh)
+                       'geothermal_MWh',            # Generation from Geothermal (MWh)
+                       'hydro_MWh',                 # Generation from Hydropower (MWh)
+                       'nuclear_MWh',               # Generation from Nuclear Power (MWh)
+                       'o-g-s_MWh',                 # Generation from Oil-Gas-Steam (MWh)
+                       'phs_MWh',                   # Generation from Pumped Hydro Storage (MWh)
+                       'upv_MWh',                   # Generation from Utility-Scale PV (MWh)
+                       'wind-ons_MWh',              # Generation from Land-Based Wind (MWh)
+                       'wind-ofs_MWh'               # Generation from Offshore Wind (MWh)
+                    ]
+    # Mapping from Cambium metric_col name to technology name, used when pulling technology specific generation metrics from API
+    technology_map = {'battery_MWh':'Battery',
+                      'biomass_MWh':'Biopower',
+                      'beccs_MWh':'Biopower CCS',
+                      'canada_MWh':'Canadian Imports',                     
+                      'coal_MWh':'Coal',                            
+                      'coal-ccs_MWh': 'Coal CCS',
+                      'csp_MWh':'Concentrating Solar Power',
+                      'distpv_MWh':'Rooftop PV',                  
+                      'gas-cc_MWh':'Natural Gas CC',
+                      'gas-cc-ccs_MWh':'Natural Gas CC CCS',
+                      'gas-ct_MWh':'Natural Gas CT',
+                      'geothermal_MWh':'Geothermal',
+                      'hydro_MWh':'Hydropower',
+                      'nuclear_MWh':'Nuclear',                  
+                      'o-g-s_MWh':'Oil-gas-steam',
+                      'upv_MWh':'Utility-scale PV',
+                      'phs_MWh':'Pumped Hydro Storage',
+                      'wind-ons_MWh':'Land-based Wind',
+                      'wind-ofs_MWh':'Offshore Wind'
+                    }
     def __init__(
         self,
         lat: float,
@@ -72,7 +133,7 @@ class CambiumData(Resource):
         use_api: bool = False,
         **kwargs
     ):
-        # Run init of Resource super class
+        # Run init of Resource parent class
         super().__init__(lat,lon,year)
 
         # Check if path_resource is a directory, if yes define as self.path_resource attribute
@@ -85,12 +146,20 @@ class CambiumData(Resource):
         # Force override internal definitions if passed in
         self.__dict__.update(kwargs)
 
+        # Define the location for identifying resource files based on geographic resolution of the Cambium Data (GEA region vs Average across Contiguous United States) instead of lat/lon
+        if location_type == 'GEA Regions 2023':
+            self.location = self.lat_lon_to_gea()
+        elif location_type == 'Nations':
+            self.location = 'Contiguous_United_States'
+        else:
+            raise ValueError("location_type argument must be either 'GEA Regions 2023' or 'Nations'")
+
         # Define the filepath and file name for the resource file
         if filepath == "":
             filepath = os.path.join(self.path_resource, 
-                                    str(lat) + "_" + str(lon) + "_" + str(self.filename_map['project_uuid'][project_uuid]) + "_" +
+                                    str(self.filename_map['project_uuid'][project_uuid]) + "_" +
                                     str(self.filename_map['scenario'][scenario]) + "_" + str(time_type) + "_" +
-                                    str(self.filename_map['location_type'][location_type]) + "_" + str(year) + ".csv")
+                                    str(self.location) + "_" + str(year) + ".csv")
         self.filename = filepath
 
         # Check if the download directory exists (hopp/simulation/resource_files/cambium), if not make the directory
@@ -104,6 +173,17 @@ class CambiumData(Resource):
         self.format_data()
 
         logger.info("CambiumData: {}".format(self.filename))
+
+    def lat_lon_to_gea(self):
+        # Cambium API handles mapping of lat/lon to GEA Region, returns the GEA region when query is invalid. Call Cambium API with year not included in their data to return GEA
+        url="{base}?project_uuid={project_uuid}&scenario={scenario}&location_type={location_type}&latitude={latitude}&longitude={longitude}&year={year}&time_type={time_type}&metric_col={metric_col}".format(
+            base=CAMBIUM_BASE_URL, project_uuid='0f92fe57-3365-428a-8fe8-0afc326b3b43', scenario='Mid-case with 100% decarbonization by 2035', location_type='GEA Regions 2023',
+            latitude=self.latitude, longitude=self.longitude, year=2031, time_type=self.time_type, metric_col='generation'
+        )
+        response = json.loads(requests.get(url).text)
+        gea = response['query']['location'].replace(" ","_")
+
+        return gea
 
     def download_resource(self):
         pass
