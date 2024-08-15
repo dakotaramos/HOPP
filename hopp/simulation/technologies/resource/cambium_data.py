@@ -213,7 +213,7 @@ class CambiumData(Resource):
                     )
                     r = requests.get(url)
                     if r:
-                        response_dict[metric] = json.loads(r.text)
+                        response_dict[metric] = json.loads(r.text)['message'][0]['values']
                     elif r.status_code == 400 or r.status_code == 403:
                         print(r.url)
                         err = r.text
@@ -237,7 +237,7 @@ class CambiumData(Resource):
                     )
                     r = requests.get(url)
                     if r:
-                        response_dict[metric] = json.loads(r.text)
+                        response_dict[metric] = json.loads(r.text)['message'][0]['values']
                     elif r.status_code == 400 or r.status_code == 403:
                         print(r.url)
                         err = r.text
@@ -252,7 +252,14 @@ class CambiumData(Resource):
                         raise RuntimeError("Maximum API request rate exceeded!")
                     else:
                         n_tries +=1
-
+                # Save the response_dict as a json file
+                # TODO: double check if raising an exception stops this from happening
+                localfile = open(filename, mode="w+")
+                json.dump(response_dict, localfile)
+                localfile.close()
+                if os.path.isfile(filename):
+                    success = True
+                    break
             except requests.exceptions.Timeout:
                 time.sleep(0.2)
                 n_tries +=1
