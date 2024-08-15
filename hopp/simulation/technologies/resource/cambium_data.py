@@ -49,20 +49,19 @@ class CambiumData(Resource):
     """
 
     # Define a map between arguments and appropriate naming conventions for defining/identifying resource files
-    filename_map = {
-        'project_uuid': {'82460f06-548c-4954-b2d9-b84ba92d63e2':'Cambium22',
-                         '0f92fe57-3365-428a-8fe8-0afc326b3b43':'Cambium23'},
-        'scenario': {'High demand growth':'HighDemandGrowth',
-                     'High natural gas prices':'HighNGPrices',
-                     'High renewable energy cost':'HighRenewableCost',
-                     'Low natural gas prices':'LowNGPrices',
-                     'Low renewable energy cost':'LowRenewableCost',
-                     'Mid-case':'MidCase',
-                     'Mid-case with 100% decarbonization by 2035':'MidCase100by2035', 
-                     'Mid-case with 95% decarbonization by 2050':'MidCase95by2050'},
-        'location_type': {'GEA Regions 2023':'GEA',
-                          'Nations':'Nation'},
-    }
+    filename_map = {'project_uuid':     {'82460f06-548c-4954-b2d9-b84ba92d63e2':'Cambium22',
+                                         '0f92fe57-3365-428a-8fe8-0afc326b3b43':'Cambium23'},
+                    'scenario':         {'High demand growth':'HighDemandGrowth',
+                                         'High natural gas prices':'HighNGPrices',
+                                         'High renewable energy cost':'HighRenewableCost',
+                                         'Low natural gas prices':'LowNGPrices',
+                                         'Low renewable energy cost':'LowRenewableCost',
+                                         'Mid-case':'MidCase',
+                                         'Mid-case with 100% decarbonization by 2035':'MidCase100by2035', 
+                                         'Mid-case with 95% decarbonization by 2050':'MidCase95by2050'},
+                    'location_type':    {'GEA Regions 2023':'GEA',
+                                         'Nations':'Nation'},
+                    }
 
     ## Define Cambium metrics and mappings needed to pull data from the Cambium API for use in LCA analysis
     # Long-Run Marginal Emissions Rates
@@ -140,13 +139,16 @@ class CambiumData(Resource):
         if os.path.isdir(path_resource):
             self.path_resource = path_resource
         
-        # update attribute with cambium directory
+        # update path with cambium directory
         self.path_resource = os.path.join(self.path_resource, 'cambium')
 
-        # Force override internal definitions if passed in
+        # Force override internal definitions if kwargs passed in
         self.__dict__.update(kwargs)
 
-        # Define the location for identifying resource files based on geographic resolution of the Cambium Data (GEA region vs Average across Contiguous United States) instead of lat/lon
+        # Define year to start pulling cambium data from
+        # TODO: Update with logic to convert from year to cambium year (ask Masha and Evan)
+
+        # Define a location attribute for identifying resource files based on geographic resolution of the Cambium Data (GEA region vs Average across Contiguous United States) instead of lat/lon
         if location_type == 'GEA Regions 2023':
             self.location = self.lat_lon_to_gea()
         elif location_type == 'Nations':
@@ -155,6 +157,7 @@ class CambiumData(Resource):
             raise ValueError("location_type argument must be either 'GEA Regions 2023' or 'Nations'")
 
         # Define the filepath and file name for the resource file
+        # TODO: Update year to be cambium_year 
         if filepath == "":
             filepath = os.path.join(self.path_resource, 
                                     str(self.filename_map['project_uuid'][project_uuid]) + "_" +
@@ -162,20 +165,24 @@ class CambiumData(Resource):
                                     str(self.location) + "_" + str(year) + ".csv")
         self.filename = filepath
 
-        # Check if the download directory exists (hopp/simulation/resource_files/cambium), if not make the directory
+        # Check if the download directory exists (HOPP/hopp/simulation/resource_files/cambium), if not make the directory
         self.check_download_dir()
 
-        # If the resource file does not exist in directory or use_api flag == True, download the data
-        if not os.path.isfile(self.filename) or use_api:
-            self.download_resource()
+        # Loop through years available in cambium data (2025 through 2050 in 5 year intervals)
+        # If a resource file does not already exist in the directory or use_api flag == True, download the data
+        for year_to_check in range(cambium_year, 2055, 5):
+            self.filename = self.filename.replace(self.filename[-8:-4], str(year_to_check))
+            if not os.path.isfile(self.filename) or use_api:
+                self.download_resource()
 
         # TODO: verify purpose / functionality in wind_resource.py and solar_resource.py
         self.format_data()
 
-        logger.info("CambiumData: {}".format(self.filename))
+        # TODO: verify purpose of logger, present in solar_resource.py but not wind_resource.py
+        # logger.info("CambiumData: {}".format(self.filename))
 
     def lat_lon_to_gea(self):
-        # Cambium API handles mapping of lat/lon to GEA Region, returns the GEA region when query is invalid. Call Cambium API with year not included in their data to return GEA
+        # Cambium API handles mapping of lat/lon to GEA Region, returns the GEA region when query is invalid. Call Cambium API with year not included in their data (2031) to return GEA
         url="{base}?project_uuid={project_uuid}&scenario={scenario}&location_type={location_type}&latitude={latitude}&longitude={longitude}&year={year}&time_type={time_type}&metric_col={metric_col}".format(
             base=CAMBIUM_BASE_URL, project_uuid='0f92fe57-3365-428a-8fe8-0afc326b3b43', scenario='Mid-case with 100% decarbonization by 2035', location_type='GEA Regions 2023',
             latitude=self.latitude, longitude=self.longitude, year=2031, time_type=self.time_type, metric_col='generation'
@@ -185,9 +192,77 @@ class CambiumData(Resource):
 
         return gea
 
+    #TODO: update saving of API response in dict to only save values of metric instead of full text
+    #TODO: update to save data from dictionary to single .csv / json file and return success = True
+    @staticmethod
+    def call_api(filename):
+        # Instantiate dictionary to hold data for all variables before writing to file
+        response_dict = {}
+
+        n_tries = 0 
+        success = False
+        while n_tries < 5:
+
+            try:
+                # Loop through emissions and 'generation' metrics and call API to pull data
+                for metric in lrmer_metric_cols + list(gen_metric_cols[0]):
+                    # Define URL for emissions metrics and 'generation' metric
+                    url="{base}?project_uuid={project_uuid}&scenario={scenario}&location_type={location_type}&latitude={latitude}&longitude={longitude}&year={year}&time_type={time_type}&metric_col={metric_col}".format(
+                    base=CAMBIUM_BASE_URL, project_uuid=self.project_uuid, scenario=self.scenario, location_type=self.location_type,
+                    latitude=self.latitude, longitude=self.longitude, year=year_to_check, time_type=self.time_type, metric_col = metric
+                    )
+                    r = requests.get(url)
+                    if r:
+                        response_dict[metric] = json.loads(r.text)
+                    elif r.status_code == 400 or r.status_code == 403:
+                        print(r.url)
+                        err = r.text
+                        text_json = json.loads(r.text)
+                        if 'errors' in text_json.keys():
+                            err = text_json['errors']
+                        raise requests.exceptions.HTTPError(err)
+                    elif r.status_code == 404:
+                        print(filename)
+                        raise requests.exceptions.HTTPError
+                    elif r.status_code == 429:
+                        raise RuntimeError("Maximum API request rate exceeded!")
+                    else:
+                        n_tries +=1
+                # Loop through generation metrics and call API to pull data
+                for metric in gen_metric_cols[1:]:
+                    # Define URL for generation metrics (metric_col='*_MWh', additional arg -> technology='<technology_map[metric_col]>')
+                    url="{base}?project_uuid={project_uuid}&scenario={scenario}&location_type={location_type}&latitude={latitude}&longitude={longitude}&year={year}&time_type={time_type}&metric_col=*_MWh&technology={technology}".format(
+                    base=CAMBIUM_BASE_URL, project_uuid=self.project_uuid, scenario=self.scenario, location_type=self.location_type,
+                    latitude=self.latitude, longitude=self.longitude, year=year_to_check, time_type=self.time_type, technology=technology_map[metric]
+                    )
+                    r = requests.get(url)
+                    if r:
+                        response_dict[metric] = json.loads(r.text)
+                    elif r.status_code == 400 or r.status_code == 403:
+                        print(r.url)
+                        err = r.text
+                        text_json = json.loads(r.text)
+                        if 'errors' in text_json.keys():
+                            err = text_json['errors']
+                        raise requests.exceptions.HTTPError(err)
+                    elif r.status_code == 404:
+                        print(filename)
+                        raise requests.exceptions.HTTPError
+                    elif r.status_code == 429:
+                        raise RuntimeError("Maximum API request rate exceeded!")
+                    else:
+                        n_tries +=1
+
+            except requests.exceptions.Timeout:
+                time.sleep(0.2)
+                n_tries +=1
+
+        return success
+
     def download_resource(self):
-        pass
-        #TODO: update logic with API calls
+        success = self.call_api(filename=self.filename)
+
+        return success
 
     def format_data(self):
         """
