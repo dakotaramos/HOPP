@@ -192,8 +192,8 @@ class CambiumData(Resource):
 
         return gea
 
-    #TODO: update saving of API response in dict to only save values of metric instead of full text
-    #TODO: update to save data from dictionary to single .csv / json file and return success = True
+    #TODO: should I save / record full API response, partial, just values?
+    #TODO: OK to save as json? preference for csv?
     @staticmethod
     def call_api(filename):
         # Instantiate dictionary to hold data for all variables before writing to file
@@ -252,10 +252,15 @@ class CambiumData(Resource):
                         raise RuntimeError("Maximum API request rate exceeded!")
                     else:
                         n_tries +=1
-                # Save the response_dict as a json file
-                # TODO: double check if raising an exception stops this from happening
+                # # Save the response_dict as a json file
+                # localfile = open(filename, mode="w+")
+                # json.dump(response_dict, localfile)
+                # localfile.close()
+                # Save the response dict as a csv file
                 localfile = open(filename, mode="w+")
-                json.dump(response_dict, localfile)
+                w = csv.writer(localfile)
+                w.writerow(list(response_dict.keys()))
+                w.writerows(zip(*list(response.dict.values())))
                 localfile.close()
                 if os.path.isfile(filename):
                     success = True
