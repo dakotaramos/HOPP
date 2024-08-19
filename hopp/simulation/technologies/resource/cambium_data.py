@@ -2,7 +2,7 @@ import os
 import csv
 from pathlib import Path
 from typing import Union
-import numpy as np
+# import numpy as np
 import requests
 import json
 
@@ -135,6 +135,12 @@ class CambiumData(Resource):
         # Run init of Resource parent class
         super().__init__(lat,lon,year)
 
+        # Define attributes not captured by parent class init
+        self.project_uuid = project_uuid
+        self.scenario = scenario
+        self.location_type = location_type
+        self.time_type = time_type
+
         # Check if path_resource is a directory, if yes define as self.path_resource attribute
         if os.path.isdir(path_resource):
             self.path_resource = path_resource
@@ -146,23 +152,34 @@ class CambiumData(Resource):
         self.__dict__.update(kwargs)
 
         # Define year to start pulling cambium data from
-        # TODO: Update with logic to convert from year to cambium year (ask Masha and Evan)
+        # TODO: Verify logic with Evan / Masha
+        if year < 2025:
+            self.cambium_year = 2025
+        elif year < 2030:
+            self.cambium_year = 2030
+        elif year < 2035:
+            self.cambium_year = 2035
+        elif year < 2040:
+            self.cambium_year = 2040
+        elif year < 2045:
+            self.cambium_year = 2045
+        elif year < 2050:
+            self.cambium_year = 2050
 
         # Define a location attribute for identifying resource files based on geographic resolution of the Cambium Data (GEA region vs Average across Contiguous United States) instead of lat/lon
-        if location_type == 'GEA Regions 2023':
+        if self.location_type == 'GEA Regions 2023':
             self.location = self.lat_lon_to_gea()
-        elif location_type == 'Nations':
+        elif self.location_type == 'Nations':
             self.location = 'Contiguous_United_States'
         else:
             raise ValueError("location_type argument must be either 'GEA Regions 2023' or 'Nations'")
 
         # Define the filepath and file name for the resource file
-        # TODO: Update year to be cambium_year 
         if filepath == "":
             filepath = os.path.join(self.path_resource, 
                                     str(self.filename_map['project_uuid'][project_uuid]) + "_" +
                                     str(self.filename_map['scenario'][scenario]) + "_" + str(time_type) + "_" +
-                                    str(self.location) + "_" + str(year) + ".csv")
+                                    str(self.location) + "_" + str(self.cambium_year) + ".csv")
         self.filename = filepath
 
         # Check if the download directory exists (HOPP/hopp/simulation/resource_files/cambium), if not make the directory
@@ -170,7 +187,8 @@ class CambiumData(Resource):
 
         # Loop through years available in cambium data (2025 through 2050 in 5 year intervals)
         # If a resource file does not already exist in the directory or use_api flag == True, download the data
-        for year_to_check in range(cambium_year, 2055, 5):
+        for year_to_check in range(self.cambium_year, 2055, 5):
+            self.year_to_check = year_to_check
             self.filename = self.filename.replace(self.filename[-8:-4], str(year_to_check))
             if not os.path.isfile(self.filename) or use_api:
                 self.download_resource()
@@ -192,10 +210,7 @@ class CambiumData(Resource):
 
         return gea
 
-    #TODO: should I save / record full API response, partial, just values?
-    #TODO: OK to save as json? preference for csv?
-    @staticmethod
-    def call_api(filename):
+    def call_api(self, filename):
         # Instantiate dictionary to hold data for all variables before writing to file
         response_dict = {}
 
@@ -205,11 +220,11 @@ class CambiumData(Resource):
 
             try:
                 # Loop through emissions and 'generation' metrics and call API to pull data
-                for metric in lrmer_metric_cols + list(gen_metric_cols[0]):
+                for metric in self.lrmer_metric_cols + [self.gen_metric_cols[0]]:
                     # Define URL for emissions metrics and 'generation' metric
                     url="{base}?project_uuid={project_uuid}&scenario={scenario}&location_type={location_type}&latitude={latitude}&longitude={longitude}&year={year}&time_type={time_type}&metric_col={metric_col}".format(
                     base=CAMBIUM_BASE_URL, project_uuid=self.project_uuid, scenario=self.scenario, location_type=self.location_type,
-                    latitude=self.latitude, longitude=self.longitude, year=year_to_check, time_type=self.time_type, metric_col = metric
+                    latitude=self.latitude, longitude=self.longitude, year=self.year_to_check, time_type=self.time_type, metric_col = metric
                     )
                     r = requests.get(url)
                     if r:
@@ -229,11 +244,11 @@ class CambiumData(Resource):
                     else:
                         n_tries +=1
                 # Loop through generation metrics and call API to pull data
-                for metric in gen_metric_cols[1:]:
+                for metric in self.gen_metric_cols[1:]:
                     # Define URL for generation metrics (metric_col='*_MWh', additional arg -> technology='<technology_map[metric_col]>')
                     url="{base}?project_uuid={project_uuid}&scenario={scenario}&location_type={location_type}&latitude={latitude}&longitude={longitude}&year={year}&time_type={time_type}&metric_col=*_MWh&technology={technology}".format(
                     base=CAMBIUM_BASE_URL, project_uuid=self.project_uuid, scenario=self.scenario, location_type=self.location_type,
-                    latitude=self.latitude, longitude=self.longitude, year=year_to_check, time_type=self.time_type, technology=technology_map[metric]
+                    latitude=self.latitude, longitude=self.longitude, year=self.year_to_check, time_type=self.time_type, technology=self.technology_map[metric]
                     )
                     r = requests.get(url)
                     if r:
@@ -260,7 +275,7 @@ class CambiumData(Resource):
                 localfile = open(filename, mode="w+")
                 w = csv.writer(localfile)
                 w.writerow(list(response_dict.keys()))
-                w.writerows(zip(*list(response.dict.values())))
+                w.writerows(zip(*list(response_dict.values())))
                 localfile.close()
                 if os.path.isfile(filename):
                     success = True
@@ -283,3 +298,8 @@ class CambiumData(Resource):
             raise FileNotFoundError(f"{self.filename} does not exist. Try `download_resource` first.")
 
         self.data = self.filename
+
+    @Resource.data.setter
+    def data(self, data_dict):
+        #TODO: Verify if this needs to be defined. Multiple years worth of data is downloaded, does it make sense to save it all to a dictionary?
+        pass
