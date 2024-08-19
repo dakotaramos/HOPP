@@ -2,11 +2,9 @@ import os
 import csv
 from pathlib import Path
 from typing import Union
-# import numpy as np
 import requests
 import json
 
-from hopp.utilities.keys import get_developer_nrel_gov_key, get_developer_nrel_gov_email
 from hopp.utilities.log import hybrid_logger as logger
 from hopp.simulation.technologies.resource.resource import Resource
 from hopp import ROOT_DIR
@@ -152,19 +150,20 @@ class CambiumData(Resource):
         self.__dict__.update(kwargs)
 
         # Define year to start pulling cambium data from
-        # TODO: Verify logic with Evan / Masha
-        if year < 2025:
+        if year <= 2025:
             self.cambium_year = 2025
-        elif year < 2030:
+        elif year <= 2030:
             self.cambium_year = 2030
-        elif year < 2035:
+        elif year <= 2035:
             self.cambium_year = 2035
-        elif year < 2040:
+        elif year <= 2040:
             self.cambium_year = 2040
-        elif year < 2045:
+        elif year <= 2045:
             self.cambium_year = 2045
-        elif year < 2050:
+        elif year <= 2050:
             self.cambium_year = 2050
+        elif year > 2050:
+            raise ValueError("The current release of Cambium 2023 provides data up to 2050, 'year' argument must be <= 2050")
 
         # Define a location attribute for identifying resource files based on geographic resolution of the Cambium Data (GEA region vs Average across Contiguous United States) instead of lat/lon
         if self.location_type == 'GEA Regions 2023':
@@ -193,10 +192,10 @@ class CambiumData(Resource):
             if not os.path.isfile(self.filename) or use_api:
                 self.download_resource()
 
-        # TODO: verify purpose / functionality in wind_resource.py and solar_resource.py
+        # TODO: verify purpose / functionality in wind_resource.py and solar_resource.py with Chris B.
         self.format_data()
 
-        # TODO: verify purpose of logger, present in solar_resource.py but not wind_resource.py
+        # TODO: verify if this info should be logged with Chris B.
         # logger.info("CambiumData: {}".format(self.filename))
 
     def lat_lon_to_gea(self):
@@ -301,5 +300,4 @@ class CambiumData(Resource):
 
     @Resource.data.setter
     def data(self, data_dict):
-        #TODO: Verify if this needs to be defined. Multiple years worth of data is downloaded, does it make sense to save it all to a dictionary?
         pass
