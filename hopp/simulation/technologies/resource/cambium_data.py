@@ -188,7 +188,8 @@ class CambiumData(Resource):
         # If a resource file does not already exist in the directory or use_api flag == True, download the data
         for year_to_check in range(self.cambium_year, 2055, 5):
             self.year_to_check = year_to_check
-            self.filename = self.filename.replace(self.filename[-8:-4], str(year_to_check))
+            self.filename = self.filename[:-8] + str(year_to_check) + self.filename[-4:]
+            # self.filename = self.filename.replace(self.filename[-8:-4], str(year_to_check))
             if not os.path.isfile(self.filename) or use_api:
                 self.download_resource()
 
@@ -301,3 +302,6 @@ class CambiumData(Resource):
     @Resource.data.setter
     def data(self, data_dict):
         pass
+
+if __name__ == '__main__':
+    CambiumData(lat=42.55, lon=-90.69, year=2024)
