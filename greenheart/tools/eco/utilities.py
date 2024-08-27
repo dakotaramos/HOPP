@@ -6,6 +6,7 @@ import copy
 import numpy as np
 import numpy_financial as npf
 import pandas as pd
+import openpyxl
 
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
@@ -14,6 +15,7 @@ import matplotlib.ticker as ticker
 import ORBIT as orbit
 
 from hopp.simulation.technologies.resource.wind_resource import WindResource
+from hopp.simulation.technologies.resource.cambium_data import CambiumData
 
 from hopp.simulation import HoppInterface
 
@@ -22,6 +24,8 @@ from hopp.utilities import load_yaml
 from hopp.simulation.technologies.dispatch import plot_tools
 
 from .finance import adjust_orbit_costs
+
+from hopp import ROOT_DIR
 
 """
 This function returns the ceiling of a/b (rounded to the nearest greater integer). 
@@ -1428,6 +1432,280 @@ def save_energy_flows(
     df.to_csv(os.path.join(filepath, "energy_flows.csv"))
 
     return output
+
+###NOTE / TODO:
+    # Add all config for LCA to greenheart_config yaml as input
+    # update greenheart_simulation.py 
+        # call of post_process_simulation() with flags for run_lca()
+    # update cambium logic for technology year vs installation period vs analysis year vs years of operation (masha & evan -> 5 years for design/construction phase)
+    # update post_process_simulation() to call run_lca()
+#NOTE: Suedocode:
+    # x 1. define conversions
+    # 2. pull greet values (start- pull all, optimal- based on hopp/system config)
+    # 3. define variables to each years LCA calculation data
+    # 4. logic to convert atb_year to cambium_year (+5 yrs)
+    # 5. define lists to hold data for all LCA calculations / cambium years
+    # 6. read in hopp data as df (engineer to electrolyzer kwh, energy from grid kwh, energy from renewables kwh, total energy kwh)
+    # 7. loop through cambium files, read in data, concat with hopp data, perform calculations based on grid case, append data to lists from 5
+    # 8. after looping through all cambium files, create dataframe with lists from 5/7 (emissions_intensities_df)
+    # 9. calculate endoflife_year = cambium_year + system_life
+    # 10. define lists for interpolated data
+    # 11. loop through each year between cambium_year and endoflife_year
+        # if year <= max year interpolate values for that year
+        # else append last value of emissions_intensities_df (from 8) to interpolated lists
+    # 12. sum interpolated lists * annual h2 prod sum / h2prod_life_sum to calculate each _LCA value
+    # 13. put all cumulative metrics into dictionary and then dataframe 
+    # 14. save as csv
+    # grid_case put in greenheart_config as input
+
+def run_lca(
+    greenheart_config,
+    hopp_config,
+    ):
+
+    ## Conversions
+    # Unit conversions
+    mmbtu_to_kWh = 293.07107                # 1 MMbtu = 293.07107 kWh 
+    mmbtu_to_MJ = 1055.055853               # 1 MMbtu = 1055.055853 MJ
+    btu_to_kWh = 0.00029307107              # 1 btu = 0.00029307107 kWh
+    btu_to_MJ = 0.00105506                  # 1 btu = 0.00105506 MJ 
+    kg_h2_to_mmbtuhhv_h2 = 0.1341           # 1 kg H2 = 0.1341 MMbtu-hhv h2
+    mmbtuhhv_h2_to_kg_h2 = 7.4571215511     # 1 MMbtu-hhv H2 = 7.4571215511 kg H2
+    kg_h2_to_mmbtulhv_h2 = 0.114            # 1 kg H2 = 0.114 MMbtu-lhv H2
+    mmbtulhv_h2_to_kg_h2 = 7.1428571429     # 1 MMbtu-lhv H2 = 7.1428571429 kg H2
+    kg_CH4_to_kg_CO2e = 29.8                # 1 kg CH4 = 29.8 kg CO2e 
+    ton_to_kg = 907.18474                   # 1 ton = 907.18474 kg
+    ton_to_metric_tonne = 0.90718474        # 1 ton = 0.90718474 metric tonne
+    g_to_kg_conv  = 0.001                   # 1 g = 0.001 kg
+    kg_to_MT_conv = 0.001                   # 1 kg = 0.001 metric tonne
+    MT_to_kg_conv = 1000                    # 1 metric tonne = 1000 kg
+    kWh_to_MWh_conv = 0.001                 # 1 kWh = 0.001 MWh 
+
+    # Chemical conversion formulas for greenhouse gases (GHGs) to CO2e emissions intensities (EI)
+    # CO2 (VOC, CO, CO2) = CO2 + (VOC*0.85/0.27) + (CO*0.43/0.27)
+    # GHGs = CO2 (VOC, CO, CO2) + (CH4*29.8) + (N2O)*273 + (VOC*0) + (CO*0) + (NOx*0) + (BC*0) + (OC*0)
+    # GHGs = CO2 + (VOC*0.85/0.27) + (CO*0.43/0.27) + (CH4*29.8) + (N20*273)
+    VOC_to_CO2e = (0.85/0.27)
+    CO_to_CO2e = (0.43/0.27)
+    CH4_to_CO2e = 29.8
+    N2O_to_CO2e = 273
+
+    ## Define project_lifetime
+    project_lifetime = greenheart_config["project_parameters"]["project_lifetime"]
+
+    ## GREET Data
+    # Hardcoded values for efficiencies, emissions intensities (EI), combustion, consumption, and production processes
+    #TODO: In future, update to pull values from GREET or other models programmatically if possible
+    # Following values determined through communications with GREET / ANL team
+    NH3_boiler_EI = 0.5             # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
+    smr_NG_combust = 56.2           # Natural gas combustion from SMR (g CO2e/MJ)
+    smr_HEX_eff = 0.9               # Heat exchange efficiency (%)
+    smr_NG_supply = 9               # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
+    ccs_PO_consume = 0              # Power consumption for CCS (kWh/kg CO2)
+    atr_steam_prod = 0              # No steam exported during ATR (MJ/kg H2)
+    atr_ccs_steam_prod = 0          # No steam exported during ATR (MJ/kg H2)
+    # Following values determined through communications with LBNL
+    steel_H2_consume = 0.06596      # Metric tonnes of H2 per tonne of steel (ton H2/ton steel), from comms with LBNL
+    steel_NG_consume = 0.71657      # GJ-LHV per tonne of steel (GJ-LHV/ ton steel), from comms with LBNL
+    steel_lime_consume = 0.01812    # metric tonne of lime per tonne of steel (ton lime / ton steel), from comms with LBNL
+    steel_iron_ore_consume = 1.629  # metric tonnes of iron ore per metric tonne of steel, from comms with LBNL
+    steel_PO_consume = 0.5502       # MWh per metric tonne of steel, from comms with LBNL
+    steel_H2O_consume = 0.8037      # metric tonnes of H2O per tonne of steel, from comms with LBNL
+    # Following values determined from prio NREL knowledge of electrolysis and assumptions about future grid mix
+    grid_trans_losses = 0.05    # Grid losses of 5% are assumed (-)
+    fuel_to_grid_curr = 48      # Fuel mix emission intensity for current power grid (g CO2e/kWh)
+    fuel_to_grid_futu = 14      # Fuel mix emission intensity for future power grid (g CO2e/kWh) #TODO: define future power grid
+    ely_PO_consume = 55         # Electrolysis power consumption per kg h2 (kWh/kg H2)
+
+    # Define GREET directories
+    greet_2023_root_dir = ROOT_DIR / "simulation" / "resource_files" / "greet" / "2023"
+    greet_2023_blue_NH3_dir = greet_2023_root_dir / "blue_NH3_prod"
+    greet_2023_green_NH3_dir = greet_2023_root_dir / "green_NH3_prod"
+    greet_2023_conventional_NH3_dir = greet_2023_root_dir / "conventional_NH3_prod"
+    greet_2023_ccs_central_h2_dir = greet_2023_root_dir / "ccs_central_h2_prod"
+    greet_2023_no_ccs_central_h2_dir = greet_2023_root_dir / "no_ccs_central_h2_prod"
+    # Define GREET filepaths
+    greet1_2023_blue_NH3 = greet_2023_blue_NH3_dir / "GREET1_2023_Rev1.xlsm"
+    greet2_2023_blue_NH3 = greet_2023_blue_NH3_dir / "GREET2_2023_Rev1.xlsm"
+    greet1_2023_green_NH3 = greet_2023_green_NH3_dir / "GREET1_2023_Rev1.xlsm"
+    greet2_2023_green_NH3 = greet_2023_green_NH3_dir / "GREET2_2023_Rev1.xlsm"
+    greet1_2023_conventional_NH3 = greet_2023_conventional_NH3_dir / "GREET1_2023_Rev1.xlsm"
+    greet2_2023_conventional_NH3 = greet_2023_conventional_NH3_dir / "GREET2_2023_Rev1.xlsm"
+    greet1_2023_ccs_central_h2 = greet_2023_ccs_central_h2_dir / "GREET1_2023_Rev1.xlsm"
+    greet2_2023_ccs_central_h2 = greet_2023_ccs_central_h2_dir / "GREET2_2023_Rev1.xlsm"
+    greet1_2023_no_ccs_central_h2 = greet_2023_no_ccs_central_h2_dir / "GREET1_2023_Rev1.xlsm"
+    greet2_2023_no_ccs_central_h2 = greet_2023_no_ccs_central_h2_dir / "GREET2_2023_Rev1.xlsm"
+
+    # Pull GREET Values
+    #------------------------------------------------------------------------------
+    # Renewable infrastructure embedded emission intensities
+    #------------------------------------------------------------------------------
+    # NOTE: capex emissions agnostic of ccs/no_ccs and NH3 production methods, ie: can use any version of greet to pull
+    # TODO: update to pull from whatever files need to be opened based on ccs/no_ccs and NH3 config
+    # TODO: update conversion of battery_X_EI values (confirm with Masha)
+    with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
+        wind_capex_EI = (greet1['ElecInfra']['G112'].value * (1/mmbtu_to_kWh))                      # Wind CAPEX emissions (g CO2e/kWh)
+        solar_pv_capex_EI = (greet1['ElecInfra']['H112'].value)                                     # Solar PV CAPEX emissions (g CO2e/kWh)
+        nuclear_PWR_capex_EI = (greet1['ElecInfra']['D112'].value * (1/mmbtu_to_kWh))               # Nuclear Pressurized Water Reactor (PWR) CAPEX emissions (g CO2e/kWh)
+        nuclear_BWR_capex_EI = (greet1['ElecInfra']['E112'].value * (1/mmbtu_to_kWh))               # Nuclear Boiling Water Reactor (BWR) CAPEX emissions (g CO2e/kWh)
+        coal_capex_EI = (greet1['ElecInfra']['B112'].value * (1/mmbtu_to_kWh))                      # Coal CAPEX emissions (g CO2e/kWh)
+        gas_capex_EI = (greet1['ElecInfra']['C112'].value * (1/mmbtu_to_kWh))                       # Natural Gas Combined Cycle (NGCC) CAPEX emissions (g CO2e/kWh)
+        hydro_capex_EI = (greet1['ElecInfra']['F112'].value * (1/mmbtu_to_kWh))                     # Hydro CAPEX emissions (g CO2e/kWh)
+        bio_capex_EI = (greet1['ElecInfra']['L112'].value * (1/mmbtu_to_kWh))                       # Biomass CAPEX emissions (g CO2e/kWh)
+        geothermal_EGS_capex_EI = (greet1['ElecInfra']['I112'].value * (1/mmbtu_to_kWh))            # Geothermal EGS CAPEX emissions (g CO2e/kWh)
+        geothermal_flash_capex_EI = (greet1['ElecInfra']['J112'].value * (1/mmbtu_to_kWh))          # Geothermal Flash CAPEX emissions (g CO2e/kWh)
+        geothermal_binary_capex_EI = (greet1['ElecInfra']['K112'].value * (1/mmbtu_to_kWh))         # Geothermal Binary CAPEX emissions (g CO2e/kWh)
+
+    with openpyxl.load_workbook(greet2_2023_ccs_central_h2, data_only=True) as greet2:
+        pem_ely_stack_capex_EI = (greet2['Electrolyzers']['L257'].value * g_to_kg_conv)             # PEM electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
+        pem_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['I257'].value * g_to_kg_conv)     # PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+        battery_residential_EI = (greet2['Solar_PV']['DI289'].value)                                #TODO: convert from (g CO2e / PV system life) to (g CO2e/kWh) # Battery embodied emissions for residential solar PV applications (g CO2e/kWh), assumed LFP batteries
+        battery_commercial_EI = (greet2['Solar_PV']['DJ289'].value)                                 #TODO: convert from (g CO2e / PV system life) to (g CO2e/kWh) # Battery embodied emissions for commercial solar PV applications (g CO2e/kWh), assumed LFP batteries
+
+    #------------------------------------------------------------------------------
+    # Steam methane reforming (SMR) and Autothermal Reforming (ATR) - Incumbent H2 production processes
+    #------------------------------------------------------------------------------
+    #TODO: Update all SMR/ATR values below with conversion factor once confirmed with Masha
+    # Values with Carbon Capture Sequestration (CCS)
+    with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
+        smr_NG_ccs_consume = (greet1['Hydrogen']['C392'].value)                                     # SMR w/ CCS Well to Gate (WTG) Natural Gas (NG) consumption (MJ-LHV/kg H2)
+        smr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['L392'].value)                                # SMR w/ CCS WTG Renewable Natural Gas (RNG) consumption (MJ-LHV/kg H2)
+        smr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['C389'].value)                              # SMR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['L389'].value)                             # SMR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_ccs_steam_prod = (greet1_ccs['Inputs']['I1105'].value)                                  # NOTE: value = 0, no steam exported w/ CCS? SMR Steam exported w/ CCS (MJ/kg H2)
+        smr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B11'].value)                                # CCS rate for SMR (%)
+        atr_NG_ccs_consume = (greet1_ccs['Hydrogen']['N392'].value)                                 # ATR w/ CCS WTG NG consumption (MJ-LHV/kg H2)
+        atr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['O392'].value)                                # ATR w/ CCS WTG RNG consumption (MJ-LHV/kg H2)
+        atr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['N389'].value)                              # ATR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['O389'].value)                             # ATR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B15'].value)                                # CCS rate for Autothermal Reforming (%)
+    
+    # Values without CCS
+    with openpyxl.load_workbook(greet1_2023_no_ccs_central_h2, data_only=True) as greet1:
+        smr_NG_consume = (greet1['Hydrogen']['C392'].value)                                         # SMR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
+        smr_RNG_consume = (greet1['Hydrogen']['L392'].value)                                        # SMR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
+        smr_NG_PO_consume = (greet1['Hydrogen']['C389'].value)                                      # SMR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_RNG_PO_consume = (greet1['Hydrogen']['L389'].value)                                     # SMR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_steam_prod = (greet1['Inputs']['I1105'].value)                                          # SMR Steam exported w/out CCS (MJ/kg H2)
+        atr_NG_consume = (greet1['Hydrogen']['N392'].value)                                         # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
+        atr_RNG_consume = (greet1['Hydrogen']['O392'].value)                                        # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
+        atr_NG_PO_consume = (greet1['Hydrogen']['N389'].value)                                      # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_RNG_PO_consume = (greet1['Hydrogen']['O389'].value)                                     # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS # ATR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+
+    #------------------------------------------------------------------------------
+    # Ammonia (NH3)
+    #------------------------------------------------------------------------------
+    #NOTE: Hydrogen consumption for conventional / blue NH3 production not explicitly given in GREET. 
+        #  However, value is constant for NH3 from coal/poplar gasification, PEM electrolysis, and GREEN Ammonia ~= 0.197 (kg h2/kg NH3)
+        #  Thus, using this value for all NH3 production pathways
+    # Values for Green NH3
+    with openpyxl.load_workbook(greet1_2023_green_NH3, data_only=True) as greet1:
+        green_NH3_H2_consume = (greet1['Ag_Inputs']['AM54'].value)                                  # Green Ammonia production Hydrogen consumption (kg H2/kg NH3)
+        green_NH3_PO_consume = (greet1['Hydrogen']['B359'].value * btu_to_kWh)                      # Green Ammonia production Total Energy consumption (kWh/kg NH3)
+    
+    # Values for Blue NH3
+    with openpyxl.load_workbook(greet1_2023_blue_NH3, data_only=True) as greet1:
+        blue_NH3_H2_consume = (greet1['Ag_Inputs']['AM54'].value)                                   # Blue Ammonia production Hydrogen consumption (kg H2/kg NH3)
+        blue_NH3_PO_consume = (greet1['Hydrogen']['B359'].value * btu_to_kWh)                       # Blue Ammonia production Total Energy consumption (kWh/kg NH3)
+    
+    # Values for Conventional NH3
+    with openpyxl.load_workbook(greet1_2023_conventional_NH3, data_only=True) as greet1:
+        conventional_NH3_H2_consume = (greet1['Ag_Inputs']['AM54'].value)                           # Conventional Ammonia production Hydrogen consumption (kg H2/kg NH3)
+        conventional_NH3_PO_consume = (greet1['Hydrogen']['B359'].value * btu_to_kWh)               # Conventional Ammonia production Total Energy consumption (kWh/kg NH3)
+
+    #------------------------------------------------------------------------------
+    # Steel
+    #------------------------------------------------------------------------------
+    # NOTE: steel emissions agnostic of ccs/no_ccs and NH3 production methods, ie: can use any version of greet to pull
+    # TODO: update to pull from whatever files need to be opened based on ccs/no_ccs and NH3 config
+    # NOTE: Alternative DRI-EAF configurations (w/ and w/out scrap, H2 vs NG) found in greet2 > Steel > W107:Z136
+            # Iron or vs scrap % controlled by B24:C24 values
+    # NOTE: greet2 > Steel > B17:B18 controls NG vs RNG, changing these values drastically changes steel_NG_supply_EI
+    # Values for DRI-EAF 83% H2, 100% DRI 0% Scrap
+    with openpyxl.load_workbook(greet2_2023_ccs_central_h2, data_only=True) as greet2:
+        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_to_CO2e * g_to_kg_conv * (1/ton_to_metric_tonne))                 # CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg_conv * (1/ton_to_metric_tonne))                               # CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_NG_supply_EI = ((greet2['Steel']['B260'].value + (greet2['Steel']['B250'].value * VOC_to_CO2e) +                  # NOTE: these are upstream emissions of NG, not exact emissions of NG used in steel process, Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
+                              (greet2['Steel']['B251'].value * CO_to_CO2e) + (greet2['Steel']['B258'].value * CH4_to_CO2e) + 
+                              (greet2['Steel']['B259'].value * N2O_to_CO2e)
+                              ) * (1/mmbtu_to_MJ)
+                             )
+        steel_iron_ore_EI = ((greet2['Steel']['B92'].value + (greet2['Steel']['B82'].value * VOC_to_CO2e) +                     # Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
+                             (greet2['Steel']['B83'].value * CO_to_CO2e) + (greet2['Steel']['B90'].value * CH4_to_CO2e) + 
+                             (greet2['Steel']['B91'].value * N2O_to_CO2e)
+                             ) * g_to_kg_conv * (1/ton_to_kg)
+                            )
+        steel_H2O_EI = (greet2['Steel']['Y113'].value)                                                                          # TODO: update conversion, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
+
+    with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
+        steel_lime_EI = (greet1['Chemicals']['BA247'].value * g_to_kg_conv * (1/ton_to_kg))                                     # Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
+    
+    # Instantiate object to hold EI values
+    smr_Scope3_EI = 'NA'
+    smr_Scope2_EI = 'NA'
+    smr_Scope1_EI = 'NA'
+    smr_total_EI  = 'NA'
+    smr_ccs_Scope3_EI = 'NA'
+    smr_ccs_Scope2_EI = 'NA'
+    smr_ccs_Scope1_EI = 'NA'
+    smr_ccs_total_EI  = 'NA'
+    NH3_smr_Scope3_EI = 'NA'
+    NH3_smr_Scope2_EI = 'NA'
+    NH3_smr_Scope1_EI = 'NA'
+    NH3_smr_total_EI  = 'NA'
+    NH3_smr_ccs_Scope3_EI = 'NA'
+    NH3_smr_ccs_Scope2_EI = 'NA'
+    NH3_smr_ccs_Scope1_EI = 'NA'
+    NH3_smr_ccs_total_EI  = 'NA'
+    steel_smr_Scope3_EI = 'NA'
+    steel_smr_Scope2_EI = 'NA'
+    steel_smr_Scope1_EI = 'NA'
+    steel_smr_total_EI  = 'NA'
+    steel_smr_ccs_Scope3_EI = 'NA'
+    steel_smr_ccs_Scope2_EI = 'NA'
+    steel_smr_ccs_Scope1_EI = 'NA'
+    steel_smr_ccs_total_EI  = 'NA'
+    electrolysis_Scope3_EI = 'NA'
+    electrolysis_Scope2_EI = 'NA'
+    electrolysis_Scope1_EI = 'NA'
+    electrolysis_total_EI  = 'NA'
+    NH3_electrolysis_Scope3_EI = 'NA'
+    NH3_electrolysis_Scope2_EI = 'NA'
+    NH3_electrolysis_Scope1_EI = 'NA'
+    NH3_electrolysis_total_EI  = 'NA'
+    steel_electrolysis_Scope3_EI = 'NA'
+    steel_electrolysis_Scope2_EI = 'NA'
+    steel_electrolysis_Scope1_EI = 'NA'
+    steel_electrolysis_total_EI  = 'NA'
+
+    ## Cambium
+    # Pull / download cambium data files
+    cambium_data = CambiumData(lat = hopp_config["site"]["data"]["lat"],
+                               lon = hopp_config["site"]["data"]["lon"],
+                               year = hopp_config["site"]["data"]["year"],
+                               project_uuid = greenheart_config["cambium"]["project_uuid"],
+                               scenario = greenheart_config["cambium"]["scenario"],
+                               location_type = greenheart_config["cambium"]["location_type"],
+                               time_type = greenheart_config["cambium"]["time_type"],
+                               )
+
+    for resource_file in cambium_data.resource_files:
+        cambium_data_df = pd.read_csv(resource_file,
+                                      index_col= None,
+                                      header = 0, 
+                                      usecols = ['lrmer_co2_c','lrmer_ch4_c','lrmer_n2o_c','lrmer_co2_p','lrmer_ch4_p','lrmer_n2o_p','lrmer_co2e_c','lrmer_co2e_p','lrmer_co2e',\
+                                                 'generation','battery_MWh','biomass_MWh','beccs_MWh','canada_MWh','coal_MWh','coal-ccs_MWh','csp_MWh','distpv_MWh',\
+                                                 'gas-cc_MWh','gas-cc-ccs_MWh','gas-ct_MWh','geothermal_MWh','hydro_MWh','nuclear_MWh','o-g-s_MWh','phs_MWh,upv_MWh','wind-ons_MWh','wind-ofs_MWh']
+                                    )
+        cambium_data_df = cambium_data_df.reset_index().rename(columns = {'index':'Interval','lrmer_co2_c':'LRMER CO2 combustion (kg-CO2/MWh)','lrmer_ch4_c':'LRMER CH4 combustion (g-CH4/MWh)',\
+                                                                          'lrmer_n2o_c':'LRMER N2O combustion (g-N2O/MWh)','lrmer_co2_p':'LRMER CO2 production (kg-CO2/MWh)',\
+                                                                          'lrmer_ch4_p':'LRMER CH4 production (g-CH4/MWh)','lrmer_n2o_p':'LRMER N2O production (g-N2O/MWh)',\
+                                                                          'lrmer_co2e_c':'LRMER CO2 equiv. combustion (kg-CO2e/MWh)','lrmer_co2e_p':'LRMER CO2 equiv. production (kg-CO2e/MWh)',\
+                                                                          'lrmer_co2e':'LRMER CO2 equiv. total (kg-CO2e/MWh)'}
+                                                                )
+        cambium_data_df['Interval'] = cambium_data_df['Interval']+1
+        cambium_data_df = cambium_data_df.set_index('Interval')
+
 
 
 # set up function to post-process HOPP results
