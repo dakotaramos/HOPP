@@ -139,8 +139,9 @@ class CambiumData(Resource):
         self.location_type = location_type
         self.time_type = time_type
 
-        # Define attribute to store resource file names associated with class instance
+        # Define attribute to store resource file names and years of cambium data associated with class instance 
         self.resource_files = []
+        self.cambium_years = []
 
         # Check if path_resource is a directory, if yes define as self.path_resource attribute
         if os.path.isdir(path_resource):
@@ -197,6 +198,7 @@ class CambiumData(Resource):
             if not os.path.isfile(self.filename) or use_api:
                 self.download_resource()
             self.resource_files.append(str(self.filename))
+            self.cambium_years.append(self.year_to_check)
 
         # self.format_data()
 
@@ -308,3 +310,5 @@ class CambiumData(Resource):
 # if __name__ == '__main__':
 #     test = CambiumData(lat=42.55, lon=-90.69, year=2024)
 #     print(test.resource_files)
+#     print(test.cambium_years)
+#     print(ROOT_DIR / "simulation" / "resource_files" / "greet" / "2023" / "blue_NH3_prod" / "GREET1_2023_Rev1.xlsm")
