@@ -1445,7 +1445,7 @@ def save_energy_flows(
     # 3. define variables to each years LCA calculation data
     # 4. logic to convert atb_year to cambium_year (+5 yrs)
     # 5. define lists to hold data for all LCA calculations / cambium years
-    # 6. read in hopp data as df (engineer to electrolyzer kwh, energy from grid kwh, energy from renewables kwh, total energy kwh)
+    # 6. read in hopp data as df (energy to electrolyzer kwh, energy from grid kwh, energy from renewables kwh, total energy kwh)
     # 7. loop through cambium files, read in data, concat with hopp data, perform calculations based on grid case, append data to lists from 5
     # 8. after looping through all cambium files, create dataframe with lists from 5/7 (emissions_intensities_df)
     # 9. calculate endoflife_year = cambium_year + system_life
@@ -1468,17 +1468,17 @@ def run_lca(
     mmbtu_to_kWh = 293.07107                # 1 MMbtu = 293.07107 kWh 
     mmbtu_to_MWh = 0.29307107               # 1 MMbtu = 0.29307107 MWh
     mmbtu_to_MJ = 1055.055853               # 1 MMbtu = 1055.055853 MJ
-    mmbtu_to_GJ = mmbtu_to_MJ/1000          # 1 MMbtu = 1.055055853 GJ
+    mmbtu_to_GJ = 1.05505853                # 1 MMbtu = 1.055055853 GJ
     kWh_to_MJ = 3.6                         # 1 kWh = 3.6 MJ
     MJ_to_kWh = (1/3.6)                     # 1 MJ = (1/3.6) kWh ~= 0.2777777777777778 kWh
     btu_to_kWh = 0.00029307107              # 1 btu = 0.00029307107 kWh
     btu_to_MJ = 0.00105506                  # 1 btu = 0.00105506 MJ 
     ton_to_kg = 907.18474                   # 1 ton = 907.18474 kg
     ton_to_MT = 0.90718474                  # 1 ton = 0.90718474 metric tonne
-    g_to_kg_conv  = 0.001                   # 1 g = 0.001 kg
-    kg_to_MT_conv = 0.001                   # 1 kg = 0.001 metric tonne
-    MT_to_kg_conv = 1000                    # 1 metric tonne = 1000 kg
-    kWh_to_MWh_conv = 0.001                 # 1 kWh = 0.001 MWh
+    g_to_kg  = 0.001                        # 1 g = 0.001 kg
+    kg_to_MT = 0.001                        # 1 kg = 0.001 metric tonne
+    MT_to_kg = 1000                         # 1 metric tonne = 1000 kg
+    kWh_to_MWh = 0.001                      # 1 kWh = 0.001 MWh
 
     # Chemical properties
     kg_h2_to_mmbtuhhv_h2 = 0.1341                       # 1 kg H2 = 0.1341 MMbtu-hhv h2
@@ -1511,23 +1511,26 @@ def run_lca(
 
     ## GREET Data
     # Hardcoded values for efficiencies, emissions intensities (EI), combustion, consumption, and production processes
-    #TODO: In future, update to pull values from GREET or other models programmatically if possible
+    #TODO: In future, update to pull hardcoded values from GREET or other models programmatically if possible
     # Following values determined through communications with GREET / ANL team
     NH3_boiler_EI = 0.5             # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
-    # smr_NG_combust = 56.2           # NOTE: possibly pull from greet1 > hydrogen > C427+C459 Natural gas combustion from SMR (g CO2e/MJ)
+    # smr_NG_combust = 56.2         # NOTE: possibly pull from greet1 > hydrogen > C427+C459 Natural gas combustion from SMR (g CO2e/MJ)
     smr_HEX_eff = 0.9               # Heat exchange efficiency (%)
     smr_NG_supply = 9               # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
     ccs_PO_consume = 0              # Power consumption for CCS (kWh/kg CO2)
     atr_steam_prod = 0              # No steam exported during ATR (MJ/kg H2)
     atr_ccs_steam_prod = 0          # No steam exported during ATR (MJ/kg H2)
+
     # Following values determined through communications with LBNL
-    # steel_H2_consume = 0.06596      # NOTE: possibly pull from greet 2 > steel > AK66, Metric tonnes of H2 per tonne of steel (ton H2/ton steel), from comms with LBNL
-    # steel_NG_consume = 0.71657      # NOTE: possibly pull from greet 2 > Steel > AE63+AG63+AK63+AM63 OR AE78+AG78+AK78+AM78 GJ-LHV per tonne of steel (GJ-LHV/ ton steel), from comms with LBNL
+    # TODO: confirm / validate we can pull these values from Greet with Masha (compare original values with GREET values)
+    # steel_H2_consume = 0.06596      # NOTE: possibly pull from Greet2 > Steel > AK66, Metric tonnes of H2 per tonne of steel (ton H2/ton steel), from comms with LBNL
+    # steel_NG_consume = 0.71657      # NOTE: possibly pull from Greet2 > Steel > AE63+AG63+AK63+AM63 OR AE78+AG78+AK78+AM78, GJ-LHV per tonne of steel (GJ-LHV/ ton steel), from comms with LBNL
     # steel_lime_consume = 0.01812    # NOTE: possibly pull from Greet2 > Steel > AM68, metric tonne of lime per tonne of steel (ton lime / ton steel), from comms with LBNL
     # steel_iron_ore_consume = 1.629  # NOTE: possilby pull from Greet2 > Steel > AM69, metric tonnes of iron ore per metric tonne of steel, from comms with LBNL
     # steel_PO_consume = 0.5502       # NOTE: possibly pull from Greet2 > Steel > Y108, MWh per metric tonne of steel, from comms with LBNL
-    # steel_H2O_consume = 0.8037    # NOTE: pulled from GREET, metric tonnes of H2O per tonne of steel, from comms with LBNL
-    # Following values determined from prio NREL knowledge of electrolysis and assumptions about future grid mix
+    # steel_H2O_consume = 0.8037      # NOTE: possibly pull from Greet2 > Steel > Y113, metric tonnes of H2O per tonne of steel, from comms with LBNL
+    
+    # Following values determined from prior NREL knowledge of electrolysis and assumptions about future grid mix
     grid_trans_losses = 0.05    # Grid losses of 5% are assumed (-)
     fuel_to_grid_curr = 48      # Fuel mix emission intensity for current power grid (g CO2e/kWh)
     fuel_to_grid_futu = 14      # Fuel mix emission intensity for future power grid (g CO2e/kWh) #TODO: define future power grid
@@ -1573,8 +1576,8 @@ def run_lca(
         geothermal_binary_capex_EI = (greet1['ElecInfra']['K112'].value * (1/mmbtu_to_kWh))         # Geothermal Binary CAPEX emissions (g CO2e/kWh)
 
     with openpyxl.load_workbook(greet2_2023_ccs_central_h2, data_only=True) as greet2:
-        pem_ely_stack_capex_EI = (greet2['Electrolyzers']['L257'].value * g_to_kg_conv)             # PEM electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
-        pem_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['I257'].value * g_to_kg_conv)     # PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+        pem_ely_stack_capex_EI = (greet2['Electrolyzers']['L257'].value * g_to_kg)                  # PEM electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
+        pem_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['I257'].value * g_to_kg)          # PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
         battery_residential_EI = (greet2['Solar_PV']['DI289'].value)                                #TODO: convert from (g CO2e / PV system life) to (g CO2e/kWh) # Battery embodied emissions for residential solar PV applications (g CO2e/kWh), assumed LFP batteries
         battery_commercial_EI = (greet2['Solar_PV']['DJ289'].value)                                 #TODO: convert from (g CO2e / PV system life) to (g CO2e/kWh) # Battery embodied emissions for commercial solar PV applications (g CO2e/kWh), assumed LFP batteries
 
@@ -1656,8 +1659,8 @@ def run_lca(
         # May require hosting of different steel config GREET versions if desired ^
     # Values for DRI-EAF 83% H2, 100% DRI 0% Scrap
     with openpyxl.load_workbook(greet2_2023_ccs_central_h2, data_only=True) as greet2:
-        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg_conv * (1/ton_to_MT))                           # CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
-        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg_conv * (1/ton_to_MT))                                         # CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg * (1/ton_to_MT))                            # CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg * (1/ton_to_MT))                                              # CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
         steel_NG_supply_EI = ((greet2['Steel']['B260'].value + (greet2['Steel']['B250'].value * VOC_to_CO2e) +                  # NOTE: these are upstream emissions of NG, not exact emissions of NG used in steel process, Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
                               (greet2['Steel']['B251'].value * CO_to_CO2e) + (greet2['Steel']['B258'].value * CH4_gwp_to_CO2e) + 
                               (greet2['Steel']['B259'].value * N2O_gwp_to_CO2e)
@@ -1666,20 +1669,30 @@ def run_lca(
         steel_iron_ore_EI = ((greet2['Steel']['B92'].value + (greet2['Steel']['B82'].value * VOC_to_CO2e) +                     # Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
                              (greet2['Steel']['B83'].value * CO_to_CO2e) + (greet2['Steel']['B90'].value * CH4_gwp_to_CO2e) + 
                              (greet2['Steel']['B91'].value * N2O_gwp_to_CO2e)
-                             ) * g_to_kg_conv * (1/ton_to_kg)
+                             ) * g_to_kg * (1/ton_to_kg)
                             )
+        # TODO: confirm / validate we can pull these values from Greet with Masha (compare original values with GREET values)
+        steel_H2O_EI = (MMBTU_NG_to_kg_CO2e / greet2['Steel']['B249'].value)                                                    # NOTE: original value = 0.00013, current value = 15.33, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
         steel_H2O_consume = (greet2['Steel']['Y113'].value * (gal_H2O_to_MT/ton_to_MT))                                         # NOTE: original value = 0.8037, current value = 6.296, H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
-        steel_H2O_EI = (MMBTU_NG_to_kg_CO2e / greet2['Steel']['B249'].value)                                                    # TODO: Confirm with Masha this value is x100k bigger 0.00013 from literature, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
-        steel_H2_consume = (greet2['Steel']['AK66'].value * (mmbtu_to_MJ/MJLHV_per_kg_h2) * (kg_to_MT_conv/ton_to_MT))          # Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
-        steel_PO_consume = (greet2['Steel']['Y108'].value * (mmbtu_to_MWh/ton_to_MT))                                           # NOTE: original value = 0.5502, current = 10.8484, Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
-        steel_iron_ore_consume = (greet['Steel']['AM69'].value)                                                                 # Iron ore consumption for DRI-EAF Steel production (metric tonne iron ore/metric tonne steel production)
-        steel_lime_consume = (greet['Steel']['AM68'].value)                                                                     # Lime consumption for DRI-EAF Steel production (metric tonne lime/metric tonne steel production)
-        steel_NG_consume = ((greet['Steel']['AE63'].value + greet['Steel']['AG63'].value +                                      # Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
+        steel_H2_consume = (greet2['Steel']['AK66'].value * (mmbtu_to_MJ/MJLHV_per_kg_h2) * (kg_to_MT/ton_to_MT))               # NOTE: original value = 0.06596, current value = 0.08184, Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
+        steel_NG_consume = ((greet['Steel']['AE63'].value + greet['Steel']['AG63'].value +                                      # NOTE: original value = 0.71657, current value = 4.5729, Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
                             greet['Steel']['AK63'].value + greet['Steel']['AM63'].value) * (mmbtu_to_GJ/ton_to_MT))
-
+        steel_lime_consume = (greet['Steel']['AM68'].value)                                                                     # NOTE: original value = 0.01812, current value = 0.01269, Lime consumption for DRI-EAF Steel production (metric tonne lime/metric tonne steel production)
+        steel_iron_ore_consume = (greet['Steel']['AM69'].value)                                                                 # NOTE: original value = 1.629, current value = 1.82333, Iron ore consumption for DRI-EAF Steel production (metric tonne iron ore/metric tonne steel production)
+        steel_PO_consume = (greet2['Steel']['Y108'].value * (mmbtu_to_MWh/ton_to_MT))                                           # NOTE: original value = 0.5502, current = 10.8484, Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
+        
     with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
-        steel_lime_EI = (greet1['Chemicals']['BA247'].value * g_to_kg_conv * (1/ton_to_kg))                                     # Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
+        steel_lime_EI = (greet1['Chemicals']['BA247'].value * g_to_kg * (1/ton_to_kg))                                          # Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
     
+    # Load HOPP Financial Summary Data:
+        # hopp_finsum data used in original LCA analysis:
+            # Solar Capacity MW
+            # Battery Storage capcity (MW)
+            # Wind annual energy (MWh)
+            # Solar annual energy (MWh)
+            
+
+
     # Instantiate object to hold EI values
     smr_Scope3_EI = 'NA'
     smr_Scope2_EI = 'NA'
@@ -1718,6 +1731,35 @@ def run_lca(
     steel_electrolysis_Scope1_EI = 'NA'
     steel_electrolysis_total_EI  = 'NA'
 
+    # define lists to hold data for all LCA calculations / cambium years
+    electrolysis_emission_intensity = []
+    electrolysis_Scope3_emission_intensity = []
+    electrolysis_Scope2_emission_intensity = []
+    smr_Scope3_emission_intensity = []
+    smr_Scope2_emission_intensity = []
+    smr_emission_intensity = []
+    smr_ccs_Scope3_emission_intensity = []
+    smr_ccs_Scope2_emission_intensity = []
+    smr_ccs_emission_intensity = []
+    NH3_electrolysis_Scope3_emission_intensity = []
+    NH3_electrolysis_Scope2_emission_intensity = []
+    NH3_electrolysis_emission_intensity = []
+    steel_electrolysis_Scope3_emission_intensity = []
+    steel_electrolysis_Scope2_emission_intensity = []
+    steel_electrolysis_emission_intensity = []
+    NH3_smr_Scope3_emission_intensity = []
+    NH3_smr_Scope2_emission_intensity = []
+    NH3_smr_emission_intensity = []
+    steel_smr_Scope3_emission_intensity = []
+    steel_smr_Scope2_emission_intensity = []
+    steel_smr_emission_intensity = []
+    NH3_smr_ccs_Scope3_emission_intensity = []
+    NH3_smr_ccs_Scope2_emission_intensity = []
+    NH3_smr_ccs_emission_intensity = []
+    steel_smr_ccs_Scope3_emission_intensity = []
+    steel_smr_ccs_Scope2_emission_intensity = []
+    steel_smr_ccs_emission_intensity = []
+    
     ## Cambium
     # Pull / download cambium data files
     cambium_data = CambiumData(lat = hopp_config["site"]["data"]["lat"],
