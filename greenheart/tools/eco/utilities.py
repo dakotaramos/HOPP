@@ -1466,29 +1466,45 @@ def run_lca(
     ## Conversions
     # Unit conversions
     mmbtu_to_kWh = 293.07107                # 1 MMbtu = 293.07107 kWh 
+    mmbtu_to_MWh = 0.29307107               # 1 MMbtu = 0.29307107 MWh
     mmbtu_to_MJ = 1055.055853               # 1 MMbtu = 1055.055853 MJ
+    mmbtu_to_GJ = mmbtu_to_MJ/1000          # 1 MMbtu = 1.055055853 GJ
+    kWh_to_MJ = 3.6                         # 1 kWh = 3.6 MJ
+    MJ_to_kWh = (1/3.6)                     # 1 MJ = (1/3.6) kWh ~= 0.2777777777777778 kWh
     btu_to_kWh = 0.00029307107              # 1 btu = 0.00029307107 kWh
     btu_to_MJ = 0.00105506                  # 1 btu = 0.00105506 MJ 
-    kg_h2_to_mmbtuhhv_h2 = 0.1341           # 1 kg H2 = 0.1341 MMbtu-hhv h2
-    mmbtuhhv_h2_to_kg_h2 = 7.4571215511     # 1 MMbtu-hhv H2 = 7.4571215511 kg H2
-    kg_h2_to_mmbtulhv_h2 = 0.114            # 1 kg H2 = 0.114 MMbtu-lhv H2
-    mmbtulhv_h2_to_kg_h2 = 7.1428571429     # 1 MMbtu-lhv H2 = 7.1428571429 kg H2
-    kg_CH4_to_kg_CO2e = 29.8                # 1 kg CH4 = 29.8 kg CO2e 
     ton_to_kg = 907.18474                   # 1 ton = 907.18474 kg
-    ton_to_metric_tonne = 0.90718474        # 1 ton = 0.90718474 metric tonne
+    ton_to_MT = 0.90718474                  # 1 ton = 0.90718474 metric tonne
     g_to_kg_conv  = 0.001                   # 1 g = 0.001 kg
     kg_to_MT_conv = 0.001                   # 1 kg = 0.001 metric tonne
     MT_to_kg_conv = 1000                    # 1 metric tonne = 1000 kg
-    kWh_to_MWh_conv = 0.001                 # 1 kWh = 0.001 MWh 
+    kWh_to_MWh_conv = 0.001                 # 1 kWh = 0.001 MWh
 
-    # Chemical conversion formulas for greenhouse gases (GHGs) to CO2e emissions intensities (EI)
+    # Chemical properties
+    kg_h2_to_mmbtuhhv_h2 = 0.1341                       # 1 kg H2 = 0.1341 MMbtu-hhv h2
+    mmbtuhhv_h2_to_kg_h2 = 7.4571215511                 # 1 MMbtu-hhv H2 = 7.4571215511 kg H2
+    kg_h2_to_mmbtulhv_h2 = 0.114                        # 1 kg H2 = 0.114 MMbtu-lhv H2
+    mmbtulhv_h2_to_kg_h2 = 7.1428571429                 # 1 MMbtu-lhv H2 = 7.1428571429 kg H2
+    kg_CH4_to_kg_CO2e = 29.8                            # 1 kg CH4 = 29.8 kg CO2e 
+    MJHHV_per_kg_h2 = 141.88                            # Higher Heating Value of hydrogen = 141.88 MJ-HHV/kg H2
+    MJLHV_per_kg_h2 = 119.96                            # Lower Heating Value of hydrogen = 119.96 MJ-LHV/kg H2
+    kWh_per_kg_h2_LHV = (MJLHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using LHV, ~= 33.3222222 kWh/kg H2
+    kWh_per_kg_h2_HHV = (MJHHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using HHV, ~= 39.4111111 kWh/kg H2
+    gal_H2O_to_MT = 0.00378541                          # 1 US gallon of H2O = 0.00378541 metric tonnes (1 gal = 3.78541 liters, 1 liter H2O = 1 kg, 1000 kg = 1 metric tonne)
+    MMBTU_NG_to_kg_CO2e = 53                            # 1 MMBTU Natural Gas = ~53kg CO2e
+
+    # Chemical conversion formulas for greenhouse gases (GHGs) to CO2e emissions intensities (EI) with GWP and Carbon ratios
     # CO2 (VOC, CO, CO2) = CO2 + (VOC*0.85/0.27) + (CO*0.43/0.27)
     # GHGs = CO2 (VOC, CO, CO2) + (CH4*29.8) + (N2O)*273 + (VOC*0) + (CO*0) + (NOx*0) + (BC*0) + (OC*0)
     # GHGs = CO2 + (VOC*0.85/0.27) + (CO*0.43/0.27) + (CH4*29.8) + (N20*273)
-    VOC_to_CO2e = (0.85/0.27)
-    CO_to_CO2e = (0.43/0.27)
-    CH4_to_CO2e = 29.8
-    N2O_to_CO2e = 273
+    # Carbon Ratios
+    VOC_to_CO2e = (0.85/0.272727)
+    CO_to_CO2e = (0.4285710/0.272727)
+    CH4_to_CO2e = (.75/.272727)
+    # Global Warming Potential (relative to CO2)
+    CH4_gwp_to_CO2e = 29.8
+    N2O_gwp_to_CO2e = 273
+    
 
     ## Define project_lifetime
     project_lifetime = greenheart_config["project_parameters"]["project_lifetime"]
@@ -1498,19 +1514,19 @@ def run_lca(
     #TODO: In future, update to pull values from GREET or other models programmatically if possible
     # Following values determined through communications with GREET / ANL team
     NH3_boiler_EI = 0.5             # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
-    smr_NG_combust = 56.2           # Natural gas combustion from SMR (g CO2e/MJ)
+    # smr_NG_combust = 56.2           # NOTE: possibly pull from greet1 > hydrogen > C427+C459 Natural gas combustion from SMR (g CO2e/MJ)
     smr_HEX_eff = 0.9               # Heat exchange efficiency (%)
     smr_NG_supply = 9               # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
     ccs_PO_consume = 0              # Power consumption for CCS (kWh/kg CO2)
     atr_steam_prod = 0              # No steam exported during ATR (MJ/kg H2)
     atr_ccs_steam_prod = 0          # No steam exported during ATR (MJ/kg H2)
     # Following values determined through communications with LBNL
-    steel_H2_consume = 0.06596      # Metric tonnes of H2 per tonne of steel (ton H2/ton steel), from comms with LBNL
-    steel_NG_consume = 0.71657      # GJ-LHV per tonne of steel (GJ-LHV/ ton steel), from comms with LBNL
-    steel_lime_consume = 0.01812    # metric tonne of lime per tonne of steel (ton lime / ton steel), from comms with LBNL
-    steel_iron_ore_consume = 1.629  # metric tonnes of iron ore per metric tonne of steel, from comms with LBNL
-    steel_PO_consume = 0.5502       # MWh per metric tonne of steel, from comms with LBNL
-    steel_H2O_consume = 0.8037      # metric tonnes of H2O per tonne of steel, from comms with LBNL
+    # steel_H2_consume = 0.06596      # NOTE: possibly pull from greet 2 > steel > AK66, Metric tonnes of H2 per tonne of steel (ton H2/ton steel), from comms with LBNL
+    # steel_NG_consume = 0.71657      # NOTE: possibly pull from greet 2 > Steel > AE63+AG63+AK63+AM63 OR AE78+AG78+AK78+AM78 GJ-LHV per tonne of steel (GJ-LHV/ ton steel), from comms with LBNL
+    # steel_lime_consume = 0.01812    # NOTE: possibly pull from Greet2 > Steel > AM68, metric tonne of lime per tonne of steel (ton lime / ton steel), from comms with LBNL
+    # steel_iron_ore_consume = 1.629  # NOTE: possilby pull from Greet2 > Steel > AM69, metric tonnes of iron ore per metric tonne of steel, from comms with LBNL
+    # steel_PO_consume = 0.5502       # NOTE: possibly pull from Greet2 > Steel > Y108, MWh per metric tonne of steel, from comms with LBNL
+    # steel_H2O_consume = 0.8037    # NOTE: pulled from GREET, metric tonnes of H2O per tonne of steel, from comms with LBNL
     # Following values determined from prio NREL knowledge of electrolysis and assumptions about future grid mix
     grid_trans_losses = 0.05    # Grid losses of 5% are assumed (-)
     fuel_to_grid_curr = 48      # Fuel mix emission intensity for current power grid (g CO2e/kWh)
@@ -1545,7 +1561,7 @@ def run_lca(
     # TODO: update conversion of battery_X_EI values (confirm with Masha)
     with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
         wind_capex_EI = (greet1['ElecInfra']['G112'].value * (1/mmbtu_to_kWh))                      # Wind CAPEX emissions (g CO2e/kWh)
-        solar_pv_capex_EI = (greet1['ElecInfra']['H112'].value)                                     # Solar PV CAPEX emissions (g CO2e/kWh)
+        solar_pv_capex_EI = (greet1['ElecInfra']['H112'].value * (1/mmbtu_to_kWh))                  # Solar PV CAPEX emissions (g CO2e/kWh)
         nuclear_PWR_capex_EI = (greet1['ElecInfra']['D112'].value * (1/mmbtu_to_kWh))               # Nuclear Pressurized Water Reactor (PWR) CAPEX emissions (g CO2e/kWh)
         nuclear_BWR_capex_EI = (greet1['ElecInfra']['E112'].value * (1/mmbtu_to_kWh))               # Nuclear Boiling Water Reactor (BWR) CAPEX emissions (g CO2e/kWh)
         coal_capex_EI = (greet1['ElecInfra']['B112'].value * (1/mmbtu_to_kWh))                      # Coal CAPEX emissions (g CO2e/kWh)
@@ -1565,32 +1581,48 @@ def run_lca(
     #------------------------------------------------------------------------------
     # Steam methane reforming (SMR) and Autothermal Reforming (ATR) - Incumbent H2 production processes
     #------------------------------------------------------------------------------
-    #TODO: Update all SMR/ATR values below with conversion factor once confirmed with Masha
+    #TODO: Confirm with Masha correct conversions, specifically use of LHV for CCS and HHV for no CCS
     # Values with Carbon Capture Sequestration (CCS)
     with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
-        smr_NG_ccs_consume = (greet1['Hydrogen']['C392'].value)                                     # SMR w/ CCS Well to Gate (WTG) Natural Gas (NG) consumption (MJ-LHV/kg H2)
-        smr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['L392'].value)                                # SMR w/ CCS WTG Renewable Natural Gas (RNG) consumption (MJ-LHV/kg H2)
-        smr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['C389'].value)                              # SMR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['L389'].value)                             # SMR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_ccs_steam_prod = (greet1_ccs['Inputs']['I1105'].value)                                  # NOTE: value = 0, no steam exported w/ CCS? SMR Steam exported w/ CCS (MJ/kg H2)
-        smr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B11'].value)                                # CCS rate for SMR (%)
-        atr_NG_ccs_consume = (greet1_ccs['Hydrogen']['N392'].value)                                 # ATR w/ CCS WTG NG consumption (MJ-LHV/kg H2)
-        atr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['O392'].value)                                # ATR w/ CCS WTG RNG consumption (MJ-LHV/kg H2)
-        atr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['N389'].value)                              # ATR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['O389'].value)                             # ATR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B15'].value)                                # CCS rate for Autothermal Reforming (%)
+        smr_NG_ccs_consume = (greet1['Hydrogen']['C392'].value * (btu_to_MJ/MJLHV_per_kg_h2))               # SMR w/ CCS Well to Gate (WTG) Natural Gas (NG) consumption (MJ-LHV/kg H2)
+        smr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['L392'].value * (btu_to_MJ/MJLHV_per_kg_h2))          # SMR w/ CCS WTG Renewable Natural Gas (RNG) consumption (MJ-LHV/kg H2)
+        smr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['C389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))     # SMR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['L389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))    # SMR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_NG_ccs_combust = ((greet1_ccs['Hydrogen']['C427'].value + greet1_ccs['Hydrogen']['C459'].value) # SMR via NG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
+        smr_RNG_ccs_combust = ((greet1_ccs['Hydrogen']['L427'].value + greet1_ccs['Hydrogen']['L459'].value)# SMR via RNG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
+        smr_ccs_steam_prod = (greet1_ccs['Inputs']['I1105'].value * (btu_to_MJ/MJLHV_per_kg_h2))            # NOTE: value = 0, no steam exported w/ CCS? SMR Steam exported w/ CCS (MJ/kg H2)
+        smr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B11'].value)                                        # CCS rate for SMR (%)
+        atr_NG_ccs_consume = (greet1_ccs['Hydrogen']['N392'].value * (btu_to_MJ/MJLHV_per_kg_h2))           # ATR w/ CCS WTG NG consumption (MJ-LHV/kg H2)
+        atr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['O392'].value * (btu_to_MJ/MJLHV_per_kg_h2))          # ATR w/ CCS WTG RNG consumption (MJ-LHV/kg H2)
+        atr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['N389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))     # ATR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['O389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))    # ATR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_NG_ccs_combust = ((greet1_ccs['Hydrogen']['N427'].value + greet1_ccs['Hydrogen']['N459'].value) # ATR via NG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
+        atr_RNG_ccs_combust = ((greet1_ccs['Hydrogen']['O427'].value + greet1_ccs['Hydrogen']['O459'].value)# ATR via RNG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
+        atr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B15'].value)                                        # CCS rate for Autothermal Reforming (%)
     
     # Values without CCS
     with openpyxl.load_workbook(greet1_2023_no_ccs_central_h2, data_only=True) as greet1:
-        smr_NG_consume = (greet1['Hydrogen']['C392'].value)                                         # SMR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
-        smr_RNG_consume = (greet1['Hydrogen']['L392'].value)                                        # SMR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
-        smr_NG_PO_consume = (greet1['Hydrogen']['C389'].value)                                      # SMR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_RNG_PO_consume = (greet1['Hydrogen']['L389'].value)                                     # SMR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_steam_prod = (greet1['Inputs']['I1105'].value)                                          # SMR Steam exported w/out CCS (MJ/kg H2)
-        atr_NG_consume = (greet1['Hydrogen']['N392'].value)                                         # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
-        atr_RNG_consume = (greet1['Hydrogen']['O392'].value)                                        # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
-        atr_NG_PO_consume = (greet1['Hydrogen']['N389'].value)                                      # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_RNG_PO_consume = (greet1['Hydrogen']['O389'].value)                                     # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS # ATR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_NG_consume = (greet1['Hydrogen']['C392'].value * (btu_to_MJ/MJHHV_per_kg_h2))               # SMR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
+        smr_RNG_consume = (greet1['Hydrogen']['L392'].value * (btu_to_MJ/MJHHV_per_kg_h2))              # SMR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
+        smr_NG_PO_consume = (greet1['Hydrogen']['C389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))         # SMR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_RNG_PO_consume = (greet1['Hydrogen']['L389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))        # SMR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_NG_combust = ((greet1_ccs['Hydrogen']['C427'].value + greet1_ccs['Hydrogen']['C459'].value) # SMR via NG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
+        smr_RNG_combust = ((greet1_ccs['Hydrogen']['L427'].value + greet1_ccs['Hydrogen']['L459'].value)# SMR via RNG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
+        smr_steam_prod = (greet1['Inputs']['I1105'].value * (btu_to_MJ/MJHHV_per_kg_h2))                # SMR Steam exported w/out CCS (MJ/kg H2)
+        atr_NG_consume = (greet1['Hydrogen']['N392'].value) * (btu_to_MJ/MJHHV_per_kg_h2)               # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
+        atr_RNG_consume = (greet1['Hydrogen']['O392'].value * (btu_to_MJ/MJHHV_per_kg_h2))              # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
+        atr_NG_PO_consume = (greet1['Hydrogen']['N389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))         # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_RNG_PO_consume = (greet1['Hydrogen']['O389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))        # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS # ATR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_NG_combust = ((greet1_ccs['Hydrogen']['N427'].value + greet1_ccs['Hydrogen']['N459'].value) # ATR via NG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
+        atr_RNG_combust = ((greet1_ccs['Hydrogen']['O427'].value + greet1_ccs['Hydrogen']['O459'].value)# ATR via RNG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
+                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
 
     #------------------------------------------------------------------------------
     # Ammonia (NH3)
@@ -1621,21 +1653,29 @@ def run_lca(
     # NOTE: Alternative DRI-EAF configurations (w/ and w/out scrap, H2 vs NG) found in greet2 > Steel > W107:Z136
             # Iron or vs scrap % controlled by B24:C24 values
     # NOTE: greet2 > Steel > B17:B18 controls NG vs RNG, changing these values drastically changes steel_NG_supply_EI
+        # May require hosting of different steel config GREET versions if desired ^
     # Values for DRI-EAF 83% H2, 100% DRI 0% Scrap
     with openpyxl.load_workbook(greet2_2023_ccs_central_h2, data_only=True) as greet2:
-        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_to_CO2e * g_to_kg_conv * (1/ton_to_metric_tonne))                 # CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
-        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg_conv * (1/ton_to_metric_tonne))                               # CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg_conv * (1/ton_to_MT))                           # CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg_conv * (1/ton_to_MT))                                         # CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
         steel_NG_supply_EI = ((greet2['Steel']['B260'].value + (greet2['Steel']['B250'].value * VOC_to_CO2e) +                  # NOTE: these are upstream emissions of NG, not exact emissions of NG used in steel process, Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
-                              (greet2['Steel']['B251'].value * CO_to_CO2e) + (greet2['Steel']['B258'].value * CH4_to_CO2e) + 
-                              (greet2['Steel']['B259'].value * N2O_to_CO2e)
+                              (greet2['Steel']['B251'].value * CO_to_CO2e) + (greet2['Steel']['B258'].value * CH4_gwp_to_CO2e) + 
+                              (greet2['Steel']['B259'].value * N2O_gwp_to_CO2e)
                               ) * (1/mmbtu_to_MJ)
                              )
         steel_iron_ore_EI = ((greet2['Steel']['B92'].value + (greet2['Steel']['B82'].value * VOC_to_CO2e) +                     # Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
-                             (greet2['Steel']['B83'].value * CO_to_CO2e) + (greet2['Steel']['B90'].value * CH4_to_CO2e) + 
-                             (greet2['Steel']['B91'].value * N2O_to_CO2e)
+                             (greet2['Steel']['B83'].value * CO_to_CO2e) + (greet2['Steel']['B90'].value * CH4_gwp_to_CO2e) + 
+                             (greet2['Steel']['B91'].value * N2O_gwp_to_CO2e)
                              ) * g_to_kg_conv * (1/ton_to_kg)
                             )
-        steel_H2O_EI = (greet2['Steel']['Y113'].value)                                                                          # TODO: update conversion, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
+        steel_H2O_consume = (greet2['Steel']['Y113'].value * (gal_H2O_to_MT/ton_to_MT))                                         # NOTE: original value = 0.8037, current value = 6.296, H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
+        steel_H2O_EI = (MMBTU_NG_to_kg_CO2e / greet2['Steel']['B249'].value)                                                    # TODO: Confirm with Masha this value is x100k bigger 0.00013 from literature, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
+        steel_H2_consume = (greet2['Steel']['AK66'].value * (mmbtu_to_MJ/MJLHV_per_kg_h2) * (kg_to_MT_conv/ton_to_MT))          # Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
+        steel_PO_consume = (greet2['Steel']['Y108'].value * (mmbtu_to_MWh/ton_to_MT))                                           # NOTE: original value = 0.5502, current = 10.8484, Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
+        steel_iron_ore_consume = (greet['Steel']['AM69'].value)                                                                 # Iron ore consumption for DRI-EAF Steel production (metric tonne iron ore/metric tonne steel production)
+        steel_lime_consume = (greet['Steel']['AM68'].value)                                                                     # Lime consumption for DRI-EAF Steel production (metric tonne lime/metric tonne steel production)
+        steel_NG_consume = ((greet['Steel']['AE63'].value + greet['Steel']['AG63'].value +                                      # Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
+                            greet['Steel']['AK63'].value + greet['Steel']['AM63'].value) * (mmbtu_to_GJ/ton_to_MT))
 
     with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
         steel_lime_EI = (greet1['Chemicals']['BA247'].value * g_to_kg_conv * (1/ton_to_kg))                                     # Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
