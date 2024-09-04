@@ -27,7 +27,6 @@ class GREETData:
     def __init__(
         self,
         year: int = 2023,
-        project_lifetime: int = 30,
         path_resource: Union[str, Path] = ROOT_DIR / "simulation" / "resource_files",
         filepath: Union[str, Path] ="",
         preprocess_greet: bool = False,
@@ -35,7 +34,6 @@ class GREETData:
     ):
 
         self.year = year
-        self.project_lifetime = project_lifetime
 
         self.__dict__.update(kwargs)
 
@@ -61,7 +59,8 @@ class GREETData:
         if not os.path.isfile(self.filename) or preprocess_greet:
             self.preprocess_greet()
 
-        # self.format_data()
+        # Check if greet_X_processed.yaml exists, if not error, if yes load yaml to dictionary and save to self.data
+        self.format_data()
 
         # logger.info("CambiumData: {}".format(self.filename))
 
@@ -154,11 +153,16 @@ class GREETData:
         greet2_no_ccs_central_h2 = os.path.join(self.path_resource,"no_ccs_central_h2_prod", "GREET2_2023_Rev1.xlsm")
 
         #------------------------------------------------------------------------------
-        # Renewable infrastructure embedded emission intensities & Hydrogen production via water electrolysis
+        # Renewable infrastructure embedded emission intensities, Hydrogen production via water electrolysis, and Steel
         #------------------------------------------------------------------------------
-        # NOTE: capex emissions and electrolysis power consumption agnostic of ccs/no_ccs and NH3 production methods, ie: can use any version of greet to pull
-        # TODO: update to pull from whatever files need to be opened based on ccs/no_ccs and NH3 config
+        # NOTE: Capex EI, Electrolysis, and Steel GREET values agnostic of ccs/no_ccs and NH3 production methods, ie: can use any version of greet to pull
+        # NOTE: For Steel, alternative DRI-EAF configurations (w/ and w/out scrap, H2 vs NG) found in greet2 > Steel > W107:Z136
+                # Iron ore vs scrap % controlled by B24:C24 values
+                # greet2 > Steel > B17:B18 controls NG vs RNG, changing these values drastically changes steel_NG_supply_EI
+                    # May require hosting of different steel config GREET versions if desired
+                # Values below are for DRI-EAF 83% H2, 100% DRI 0% Scrap
         greet1 = openpyxl.load_workbook(greet1_ccs_central_h2, data_only=True)
+        # Renewable Infrastructure
         wind_capex_EI = (greet1['ElecInfra']['G112'].value / mmbtu_to_kWh)                          # NOTE: original value = 10, greet value = 9.77, Wind CAPEX emissions (g CO2e/kWh)
         solar_pv_capex_EI = (greet1['ElecInfra']['H112'].value / mmbtu_to_kWh)                      # NOTE: original value = 37, greet value = 35.87, Solar PV CAPEX emissions (g CO2e/kWh)
         nuclear_PWR_capex_EI = (greet1['ElecInfra']['D112'].value / mmbtu_to_kWh)                   # NOTE: original value = 0.3, greet value = 0.22, Nuclear Pressurized Water Reactor (PWR) CAPEX emissions (g CO2e/kWh)
@@ -170,16 +174,57 @@ class GREETData:
         geothermal_EGS_capex_EI = (greet1['ElecInfra']['I112'].value / mmbtu_to_kWh)                # NOTE: original value = 20.71, greet value = 20.52, Geothermal EGS CAPEX emissions (g CO2e/kWh)
         geothermal_flash_capex_EI = (greet1['ElecInfra']['J112'].value / mmbtu_to_kWh)              # NOTE: original value = 20.71, greet value = 4.61, Geothermal Flash CAPEX emissions (g CO2e/kWh)
         geothermal_binary_capex_EI = (greet1['ElecInfra']['K112'].value / mmbtu_to_kWh)             # NOTE: original value = 20.71, greet value = 20.44, Geothermal Binary CAPEX emissions (g CO2e/kWh)
+        # Electrolysis
         pem_ely_PO_consume = (greet1['Hydrogen']['J239'].value * btu_to_kWh * mmbtulhv_per_kg_h2)   # NOTE: original value = 55, greet value = 58.47, PEM water electrolysis energy consumption (kWh/kg H2)
+        # Steel
+        steel_lime_EI = ((greet1['Chemicals']['BA247'].value +                                      # NOTE: original value = 1.28, greet value = 1.28, Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
+                            (greet1['Chemicals']['BA237'].value * VOC_to_CO2e) +             
+                            (greet1['Chemicals']['BA238'].value * CO_to_CO2e) +
+                            (greet1['Chemicals']['BA245'].value * CH4_gwp_to_CO2e) +
+                            (greet1['Chemicals']['BA246'].value * N2O_gwp_to_CO2e)
+                            ) * g_to_kg * (1/ton_to_kg))
         greet1.close()
 
         greet2 = openpyxl.load_workbook(greet2_ccs_central_h2, data_only=True)
-        pem_ely_stack_capex_EI = (greet2['Electrolyzers']['I257'].value * g_to_kg)                  # NOTE: original value = 0.019, greet value = 0.01357 PEM electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
-        pem_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['L257'].value * g_to_kg)          # NOTE: original value = 0.019, greet value = 0.03758 PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+        # Renewable Infrastructure
         battery_LFP_residential_EI = (greet2['Solar_PV']['DI289'].value)                            # NOTE: original value = 20 (no indication of residential or commercial), greet value = 172.92 (30 yrs, 100 MWh battery), Battery embodied emissions for residential solar PV applications (g CO2e/kWh), assumed LFP batteries (can update battery chemistry in cell K155)
                                                                                                         # value must be multiplied by factor = (project_lifetime / battery_system_capacity_kwh) before use in LCA calculations, opted not to divide here so value remains agnostic of project lifetime and system battery size        
         battery_LFP_commercial_EI = (greet2['Solar_PV']['DJ289'].value)                             # NOTE: original value = 20 (no indication of residential or commercial), greet value = 106362.41 (30 yrs, 100 MWh battery), Battery embodied emissions for commercial solar PV applications (g CO2e/kWh), assumed LFP batteries (can update battery chemistry in cell W155)
                                                                                                         # value must be multiplied by factor = (project_lifetime / battery_system_capacity_kwh) before use in LCA calculations, opted not to divide here so value remains agnostic of project lifetime and system battery size
+        # Electrolysis
+        pem_ely_stack_capex_EI = (greet2['Electrolyzers']['I257'].value * g_to_kg)                  # NOTE: original value = 0.019, greet value = 0.01357 PEM electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
+        pem_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['L257'].value * g_to_kg)          # NOTE: original value = 0.019, greet value = 0.03758 PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+        # Steel
+        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg / ton_to_MT)                    # NOTE: original value = 39.29, greet value = 67.21, CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg / ton_to_MT)                                      # NOTE: original value = 174.66, greet value = 1043.87, CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        steel_NG_supply_EI = ((greet2['Steel']['B260'].value +                                                      # NOTE: original value = 13, greet value = 12.67, these are upstream emissions of NG, not exact emissions of NG used in steel process, Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
+                                (greet2['Steel']['B250'].value * VOC_to_CO2e) +                  
+                                (greet2['Steel']['B251'].value * CO_to_CO2e) + 
+                                (greet2['Steel']['B258'].value * CH4_gwp_to_CO2e) + 
+                                (greet2['Steel']['B259'].value * N2O_gwp_to_CO2e)
+                                ) / mmbtu_to_MJ
+                                )
+        steel_iron_ore_EI = ((greet2['Steel']['B92'].value +                                                        # NOTE: original value = 0.048, greet value = 0.045 Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
+                                (greet2['Steel']['B82'].value * VOC_to_CO2e) +                     
+                                (greet2['Steel']['B83'].value * CO_to_CO2e) +
+                                (greet2['Steel']['B90'].value * CH4_gwp_to_CO2e) + 
+                                (greet2['Steel']['B91'].value * N2O_gwp_to_CO2e)
+                                ) * (g_to_kg / ton_to_kg)
+                            )
+        # TODO: confirm / validate we can pull these values from Greet with Masha (compare original values with GREET values)
+        steel_H2O_EI = (MMBTU_NG_to_kg_CO2e / greet2['Steel']['B249'].value)                                        # TODO: check conversion, original value = 0.00013, greet value = 15.33, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
+        steel_H2O_consume = (greet2['Steel']['Y113'].value * (gal_H2O_to_MT/ton_to_MT))                             # NOTE: original value = 0.8037, greet value = 6.296, H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
+        steel_H2_consume = (greet2['Steel']['AK66'].value * (mmbtu_to_MJ/MJLHV_per_kg_h2) * (kg_to_MT/ton_to_MT))   # NOTE: original value = 0.06596, greet value = 0.08184, Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
+        steel_NG_consume = ((greet2['Steel']['AE63'].value +                                                        # NOTE: original value = 0.71657, greet value = 4.5729, Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
+                                greet2['Steel']['AG63'].value +                                    
+                                greet2['Steel']['AK63'].value + 
+                                greet2['Steel']['AM63'].value
+                                ) * (mmbtu_to_GJ / ton_to_MT)
+                            )
+        steel_lime_consume = (greet2['Steel']['AM68'].value)                                                        # NOTE: original value = 0.01812, greet value = 0.01269, Lime consumption for DRI-EAF Steel production (metric tonne lime/metric tonne steel production)
+        steel_iron_ore_consume = (greet2['Steel']['AM69'].value)                                                    # NOTE: original value = 1.629, greet value = 1.82333, Iron ore consumption for DRI-EAF Steel production (metric tonne iron ore/metric tonne steel production)
+        steel_PO_consume = (greet2['Steel']['Y108'].value * (mmbtu_to_MWh/ton_to_MT))                               # NOTE: original value = 0.5502, greet value = 12.259, Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
+
         greet2.close()
 
         #------------------------------------------------------------------------------
@@ -242,56 +287,53 @@ class GREETData:
         #------------------------------------------------------------------------------
         # Steel
         #------------------------------------------------------------------------------
-        # NOTE: steel emissions agnostic of ccs/no_ccs and NH3 production methods, ie: can use any version of greet to pull
-        # TODO: update to pull from whatever files need to be opened based on ccs/no_ccs and NH3 config
         # NOTE: Alternative DRI-EAF configurations (w/ and w/out scrap, H2 vs NG) found in greet2 > Steel > W107:Z136
                 # Iron or vs scrap % controlled by B24:C24 values
         # NOTE: greet2 > Steel > B17:B18 controls NG vs RNG, changing these values drastically changes steel_NG_supply_EI
             # May require hosting of different steel config GREET versions if desired ^
         # Values for DRI-EAF 83% H2, 100% DRI 0% Scrap
-        greet1 = openpyxl.load_workbook(greet1_ccs_central_h2, data_only=True)
-        steel_lime_EI = ((greet1['Chemicals']['BA247'].value +                                                      # NOTE: original value = 1.28, greet value = 1.28, Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
-                            (greet1['Chemicals']['BA237'].value * VOC_to_CO2e) +             
-                            (greet1['Chemicals']['BA238'].value * CO_to_CO2e) +
-                            (greet1['Chemicals']['BA245'].value * CH4_gwp_to_CO2e) +
-                            (greet1['Chemicals']['BA246'].value * N2O_gwp_to_CO2e)
-                            ) * g_to_kg * (1/ton_to_kg))
-        greet1.close()
+        # greet1 = openpyxl.load_workbook(greet1_ccs_central_h2, data_only=True)
+        # steel_lime_EI = ((greet1['Chemicals']['BA247'].value +                                                      # NOTE: original value = 1.28, greet value = 1.28, Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
+        #                     (greet1['Chemicals']['BA237'].value * VOC_to_CO2e) +             
+        #                     (greet1['Chemicals']['BA238'].value * CO_to_CO2e) +
+        #                     (greet1['Chemicals']['BA245'].value * CH4_gwp_to_CO2e) +
+        #                     (greet1['Chemicals']['BA246'].value * N2O_gwp_to_CO2e)
+        #                     ) * g_to_kg * (1/ton_to_kg))
+        # greet1.close()
 
-        greet2 = openpyxl.load_workbook(greet2_ccs_central_h2, data_only=True)
-        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg / ton_to_MT)                    # NOTE: original value = 39.29, greet value = 67.21, CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
-        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg / ton_to_MT)                                      # NOTE: original value = 174.66, greet value = 1043.87, CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
-        steel_NG_supply_EI = ((greet2['Steel']['B260'].value +                                                      # NOTE: original value = 13, greet value = 12.67, these are upstream emissions of NG, not exact emissions of NG used in steel process, Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
-                                (greet2['Steel']['B250'].value * VOC_to_CO2e) +                  
-                                (greet2['Steel']['B251'].value * CO_to_CO2e) + 
-                                (greet2['Steel']['B258'].value * CH4_gwp_to_CO2e) + 
-                                (greet2['Steel']['B259'].value * N2O_gwp_to_CO2e)
-                                ) / mmbtu_to_MJ
-                                )
-        steel_iron_ore_EI = ((greet2['Steel']['B92'].value +                                                        # NOTE: original value = 0.048, greet value = 0.045 Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
-                                (greet2['Steel']['B82'].value * VOC_to_CO2e) +                     
-                                (greet2['Steel']['B83'].value * CO_to_CO2e) +
-                                (greet2['Steel']['B90'].value * CH4_gwp_to_CO2e) + 
-                                (greet2['Steel']['B91'].value * N2O_gwp_to_CO2e)
-                                ) * (g_to_kg / ton_to_kg)
-                            )
-        # TODO: confirm / validate we can pull these values from Greet with Masha (compare original values with GREET values)
-        steel_H2O_EI = (MMBTU_NG_to_kg_CO2e / greet2['Steel']['B249'].value)                                        # TODO: check conversion, original value = 0.00013, greet value = 15.33, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
-        steel_H2O_consume = (greet2['Steel']['Y113'].value * (gal_H2O_to_MT/ton_to_MT))                             # NOTE: original value = 0.8037, greet value = 6.296, H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
-        steel_H2_consume = (greet2['Steel']['AK66'].value * (mmbtu_to_MJ/MJLHV_per_kg_h2) * (kg_to_MT/ton_to_MT))   # NOTE: original value = 0.06596, greet value = 0.08184, Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
-        steel_NG_consume = ((greet2['Steel']['AE63'].value +                                                        # NOTE: original value = 0.71657, greet value = 4.5729, Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
-                                greet2['Steel']['AG63'].value +                                    
-                                greet2['Steel']['AK63'].value + 
-                                greet2['Steel']['AM63'].value
-                                ) * (mmbtu_to_GJ / ton_to_MT)
-                            )
-        steel_lime_consume = (greet2['Steel']['AM68'].value)                                                        # NOTE: original value = 0.01812, greet value = 0.01269, Lime consumption for DRI-EAF Steel production (metric tonne lime/metric tonne steel production)
-        steel_iron_ore_consume = (greet2['Steel']['AM69'].value)                                                    # NOTE: original value = 1.629, greet value = 1.82333, Iron ore consumption for DRI-EAF Steel production (metric tonne iron ore/metric tonne steel production)
-        steel_PO_consume = (greet2['Steel']['Y108'].value * (mmbtu_to_MWh/ton_to_MT))                               # NOTE: original value = 0.5502, greet value = 12.259, Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
-        greet2.close()
+        # greet2 = openpyxl.load_workbook(greet2_ccs_central_h2, data_only=True)
+        # steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg / ton_to_MT)                    # NOTE: original value = 39.29, greet value = 67.21, CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        # steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg / ton_to_MT)                                      # NOTE: original value = 174.66, greet value = 1043.87, CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+        # steel_NG_supply_EI = ((greet2['Steel']['B260'].value +                                                      # NOTE: original value = 13, greet value = 12.67, these are upstream emissions of NG, not exact emissions of NG used in steel process, Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
+        #                         (greet2['Steel']['B250'].value * VOC_to_CO2e) +                  
+        #                         (greet2['Steel']['B251'].value * CO_to_CO2e) + 
+        #                         (greet2['Steel']['B258'].value * CH4_gwp_to_CO2e) + 
+        #                         (greet2['Steel']['B259'].value * N2O_gwp_to_CO2e)
+        #                         ) / mmbtu_to_MJ
+        #                         )
+        # steel_iron_ore_EI = ((greet2['Steel']['B92'].value +                                                        # NOTE: original value = 0.048, greet value = 0.045 Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
+        #                         (greet2['Steel']['B82'].value * VOC_to_CO2e) +                     
+        #                         (greet2['Steel']['B83'].value * CO_to_CO2e) +
+        #                         (greet2['Steel']['B90'].value * CH4_gwp_to_CO2e) + 
+        #                         (greet2['Steel']['B91'].value * N2O_gwp_to_CO2e)
+        #                         ) * (g_to_kg / ton_to_kg)
+        #                     )
+        # # TODO: confirm / validate we can pull these values from Greet with Masha (compare original values with GREET values)
+        # steel_H2O_EI = (MMBTU_NG_to_kg_CO2e / greet2['Steel']['B249'].value)                                        # TODO: check conversion, original value = 0.00013, greet value = 15.33, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
+        # steel_H2O_consume = (greet2['Steel']['Y113'].value * (gal_H2O_to_MT/ton_to_MT))                             # NOTE: original value = 0.8037, greet value = 6.296, H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
+        # steel_H2_consume = (greet2['Steel']['AK66'].value * (mmbtu_to_MJ/MJLHV_per_kg_h2) * (kg_to_MT/ton_to_MT))   # NOTE: original value = 0.06596, greet value = 0.08184, Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
+        # steel_NG_consume = ((greet2['Steel']['AE63'].value +                                                        # NOTE: original value = 0.71657, greet value = 4.5729, Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
+        #                         greet2['Steel']['AG63'].value +                                    
+        #                         greet2['Steel']['AK63'].value + 
+        #                         greet2['Steel']['AM63'].value
+        #                         ) * (mmbtu_to_GJ / ton_to_MT)
+        #                     )
+        # steel_lime_consume = (greet2['Steel']['AM68'].value)                                                        # NOTE: original value = 0.01812, greet value = 0.01269, Lime consumption for DRI-EAF Steel production (metric tonne lime/metric tonne steel production)
+        # steel_iron_ore_consume = (greet2['Steel']['AM69'].value)                                                    # NOTE: original value = 1.629, greet value = 1.82333, Iron ore consumption for DRI-EAF Steel production (metric tonne iron ore/metric tonne steel production)
+        # steel_PO_consume = (greet2['Steel']['Y108'].value * (mmbtu_to_MWh/ton_to_MT))                               # NOTE: original value = 0.5502, greet value = 12.259, Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
+        # greet2.close()
 
         data_dict = {
-                     'project_lifetime':self.project_lifetime,
                      # Hardcoded values
                      'NH3_boiler_EI':NH3_boiler_EI,
                      'NG_combust':NG_combust,
@@ -368,25 +410,20 @@ class GREETData:
         yaml.dump(data_dict, yaml_file, default_flow_style=False)
         yaml_file.close()
 
-    # def download_resource(self):
-    #     success = self.call_api(filename=self.filename)
+    def format_data(self):
+        """
+        """
+        if not os.path.isfile(self.filename):
+            raise FileNotFoundError(f"{self.filename} does not exist. Try `download_resource` first.")
 
-    #     return success
-
-    # #NOTE: format_data() and data() not used in current implementation, these were originally setup for processing data from single file, LCA requires up to 5 cambium files and saving all data may be too large / memory intensive
-    # #NOTE: As an alterative to loading all Cambium data into memory, current logic stores file names in self.resource_files which can be used to load data when needed for LCA calculations
-    # def format_data(self):
-    #     """
-    #     """
-    #     if not os.path.isfile(self.filename):
-    #         raise FileNotFoundError(f"{self.filename} does not exist. Try `download_resource` first.")
-
-    #     self.data = self.filename
-
-    # @Resource.data.setter
-    # def data(self, data_dict):
-    #     pass
+        yaml_file = open(self.filename, mode='r')
+        self.data = yaml.load(yaml_file, Loader=yaml.SafeLoader)
+        yaml_file.close()
 
 #Adhoc testing
-if __name__ == '__main__':
-    test = GREETData()
+# if __name__ == '__main__':
+#     test = GREETData()
+#     print(test.data)
+
+#NOTE: Runtime ~ 1m16s to fully parse greet
+#NOTE: Runtime <2s with greet preprocessed (load yaml to dict)
