@@ -77,26 +77,25 @@ class GREETData:
         mmbtu_to_MWh = 0.29307107                           # 1 MMbtu = 0.29307107 MWh
         mmbtu_to_MJ = 1055.05585262                         # 1 MMbtu = 1055.05585262 MJ
         mmbtu_to_GJ = 1.0550585262                          # 1 MMbtu = 1.05505585262 GJ
-        kWh_to_MJ = 3.6                                     # 1 kWh = 3.6 MJ
+        # kWh_to_MJ = 3.6                                     # 1 kWh = 3.6 MJ
         MJ_to_kWh = (1/3.6)                                 # 1 MJ = (1/3.6) kWh ~= 0.2777777777777778 kWh
         ton_to_kg = 907.18474                               # 1 ton = 907.18474 kg
         ton_to_MT = 0.90718474                              # 1 ton = 0.90718474 metric tonne
         g_to_kg  = 0.001                                    # 1 g = 0.001 kg
         kg_to_MT = 0.001                                    # 1 kg = 0.001 metric tonne
-        MT_to_kg = 1000                                     # 1 metric tonne = 1000 kg
-        kWh_to_MWh = 0.001                                  # 1 kWh = 0.001 MWh
-        MWh_to_kWh = 1000                                   # 1 MWh = 1000 kWh
+        # MT_to_kg = 1000                                     # 1 metric tonne = 1000 kg
+        # kWh_to_MWh = 0.001                                  # 1 kWh = 0.001 MWh
+        # MWh_to_kWh = 1000                                   # 1 MWh = 1000 kWh
 
         # Chemical properties
         mmbtuhhv_per_kg_h2 = 0.134                          # 1 kg H2 = 0.134 MMbtu-hhv h2
-        kg_h2_per_mmbtuhhv = 7.462                          # 1 MMbtu-hhv H2 = 7.462 kg H2
+        # kg_h2_per_mmbtuhhv = 7.462                          # 1 MMbtu-hhv H2 = 7.462 kg H2
         mmbtulhv_per_kg_h2 = 0.114                          # 1 kg H2 = 0.114 MMbtu-lhv H2
-        kg_h2_per_mmbtulhv = 8.772                          # 1 MMbtu-lhv H2 = 8.772 kg H2
-        kg_CH4_to_kg_CO2e = 29.8                            # 1 kg CH4 = 29.8 kg CO2e 
+        # kg_h2_per_mmbtulhv = 8.772                          # 1 MMbtu-lhv H2 = 8.772 kg H2
         MJHHV_per_kg_h2 = 141.88                            # Higher Heating Value of hydrogen = 141.88 MJ-HHV/kg H2
         MJLHV_per_kg_h2 = 119.96                            # Lower Heating Value of hydrogen = 119.96 MJ-LHV/kg H2
-        kWh_per_kg_h2_LHV = (MJLHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using LHV, ~= 33.3222222 kWh/kg H2
-        kWh_per_kg_h2_HHV = (MJHHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using HHV, ~= 39.4111111 kWh/kg H2
+        # kWh_per_kg_h2_LHV = (MJLHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using LHV, ~= 33.3222222 kWh/kg H2
+        # kWh_per_kg_h2_HHV = (MJHHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using HHV, ~= 39.4111111 kWh/kg H2
         gal_H2O_to_MT = 0.00378541                          # 1 US gallon of H2O = 0.00378541 metric tonnes (1 gal = 3.78541 liters, 1 liter H2O = 1 kg, 1000 kg = 1 metric tonne)
         MMBTU_NG_to_kg_CO2e = 53                            # 1 MMBTU Natural Gas = ~53kg CO2e when combusted
 
