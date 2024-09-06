@@ -116,7 +116,7 @@ class GREETData:
         #TODO: In future, update to pull hardcoded values from GREET or other models programmatically if possible
         # Following values determined through communications with GREET / ANL team
         NH3_boiler_EI = 0.5             # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
-        smr_NG_combust = 56.2               # Natural gas combustion emission factor (g CO2e/MJ)
+        smr_NG_combust = 56.2           # Natural gas combustion emission factor (g CO2e/MJ)
         smr_HEX_eff = 0.9               # Heat exchange efficiency (%)
         smr_NG_supply = 9               # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
         ccs_PO_consume = 0              # Power consumption for CCS (kWh/kg CO2)
@@ -239,16 +239,16 @@ class GREETData:
         #TODO; Confirm proper use of HHV vs LHV with Masha
         # Values with Carbon Capture Sequestration (CCS)
         greet1 = openpyxl.load_workbook(greet1_ccs_central_h2, data_only=True)
-        smr_NG_ccs_consume = (greet1['Hydrogen']['C392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)            # NOTE: original value = 177.1, greet value = 81.93 SMR, w/ CCS Well to Gate (WTG) Natural Gas (NG) consumption (MJ-LHV/kg H2)
-        smr_RNG_ccs_consume = (greet1['Hydrogen']['L392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)           # NOTE: greet value = 20.451, SMR w/ CCS WTG Renewable Natural Gas (RNG) consumption (MJ-LHV/kg H2)
-        smr_NG_PO_ccs_consume = (greet1['Hydrogen']['C389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)        # NOTE: original value = 1.5, greet value = 24.5, SMR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_RNG_PO_ccs_consume = (greet1['Hydrogen']['L389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)       # NOTE: greet value = -39.92, SMR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_ccs_NG_consume = (greet1['Hydrogen']['C392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)            # NOTE: original value = 177.1, greet value = 81.93 SMR, w/ CCS Well to Gate (WTG) Natural Gas (NG) consumption (MJ-LHV/kg H2)
+        smr_ccs_RNG_consume = (greet1['Hydrogen']['L392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)           # NOTE: greet value = 20.451, SMR w/ CCS WTG Renewable Natural Gas (RNG) consumption (MJ-LHV/kg H2)
+        smr_ccs_NG_PO_consume = (greet1['Hydrogen']['C389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)        # NOTE: original value = 1.5, greet value = 24.5, SMR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_ccs_RNG_PO_consume = (greet1['Hydrogen']['L389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)       # NOTE: greet value = -39.92, SMR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
         smr_ccs_steam_prod = (greet1['Inputs']['I1105'].value * btu_to_MJ * mmbtulhv_per_kg_h2)             # NOTE: value = 0, no steam exported w/ CCS? SMR Steam exported w/ CCS (MJ/kg H2)
         smr_ccs_perc_capture = (greet1['Hydrogen']['B11'].value)                                            # CCS rate for SMR (%)
-        atr_NG_ccs_consume = (greet1['Hydrogen']['N392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)            # NOTE: greet value = 200.1 ATR w/ CCS WTG NG consumption (MJ-LHV/kg H2)
-        atr_RNG_ccs_consume = (greet1['Hydrogen']['O392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)           # NOTE: greet value = 26.69 ATR w/ CCS WTG RNG consumption (MJ-LHV/kg H2)
-        atr_NG_PO_ccs_consume = (greet1['Hydrogen']['N389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)        # NOTE: greet value = 59.55 ATR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_RNG_PO_ccs_consume = (greet1['Hydrogen']['O389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)       # NOTE: greet value = -33.78 ATR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_ccs_NG_consume = (greet1['Hydrogen']['N392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)            # NOTE: greet value = 200.1 ATR w/ CCS WTG NG consumption (MJ-LHV/kg H2)
+        atr_ccs_RNG_consume = (greet1['Hydrogen']['O392'].value * btu_to_MJ * mmbtulhv_per_kg_h2)           # NOTE: greet value = 26.69 ATR w/ CCS WTG RNG consumption (MJ-LHV/kg H2)
+        atr_ccs_NG_PO_consume = (greet1['Hydrogen']['N389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)        # NOTE: greet value = 59.55 ATR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_ccs_RNG_PO_consume = (greet1['Hydrogen']['O389'].value * btu_to_kWh * mmbtulhv_per_kg_h2)       # NOTE: greet value = -33.78 ATR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
         atr_ccs_perc_capture = (greet1['Hydrogen']['B15'].value)                                            # CCS rate for Autothermal Reforming (%)
         greet1.close()
 
@@ -372,16 +372,16 @@ class GREETData:
                      'battery_LFP_residential_EI':battery_LFP_residential_EI,
                      'battery_LFP_commercial_EI':battery_LFP_commercial_EI,
                      # Steam methane reforming (SMR) and Autothermal Reforming (ATR)
-                     'smr_NG_ccs_consume':smr_NG_ccs_consume,
-                     'smr_RNG_ccs_consume':smr_RNG_ccs_consume,
-                     'smr_NG_PO_ccs_consume':smr_NG_PO_ccs_consume,
-                     'smr_RNG_PO_ccs_consume':smr_RNG_PO_ccs_consume,
+                     'smr_ccs_NG_consume':smr_ccs_NG_consume,
+                     'smr_ccs_RNG_consume':smr_ccs_RNG_consume,
+                     'smr_ccs_NG_PO_consume':smr_ccs_NG_PO_consume,
+                     'smr_ccs_RNG_PO_consume':smr_ccs_RNG_PO_consume,
                      'smr_ccs_steam_prod':smr_ccs_steam_prod,
                      'smr_ccs_perc_capture':smr_ccs_perc_capture,
-                     'atr_NG_ccs_consume':atr_NG_ccs_consume,
-                     'atr_RNG_ccs_consume':atr_RNG_ccs_consume,
-                     'atr_NG_PO_ccs_consume':atr_NG_PO_ccs_consume,
-                     'atr_RNG_PO_ccs_consume':atr_RNG_PO_ccs_consume,
+                     'atr_ccs_NG_consume':atr_ccs_NG_consume,
+                     'atr_ccs_RNG_consume':atr_ccs_RNG_consume,
+                     'atr_ccs_NG_PO_consume':atr_ccs_NG_PO_consume,
+                     'atr_ccs_RNG_PO_consume':atr_ccs_RNG_PO_consume,
                      'atr_ccs_perc_capture':atr_ccs_perc_capture,
                      'smr_NG_consume':smr_NG_consume,
                      'smr_RNG_consume':smr_RNG_consume,
