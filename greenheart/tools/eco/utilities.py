@@ -1795,11 +1795,11 @@ def run_lca(
             NH3_electrolysis_Scope1_EI = NH3_boiler_EI
             NH3_electrolysis_total_EI  = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
             # Calculate steel emissions via hybrid grid electrolysis (kg CO2e/metric tonne steel)
-            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)
+            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI * steel_iron_ore_consume  * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)
             steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()  
             steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
             steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
-        #TODO: uncomment below and validate calculations
+
         if 'grid-only' in grid_case:
             # Calculate SMR emissions. SMR and SMR + CCS are always grid-connected (kg CO2e/kg H2)
             smr_Scope3_EI = (smr_NG_supply * g_to_kg * (smr_NG_consume - smr_steam_prod/smr_HEX_eff)) + (smr_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
@@ -1853,29 +1853,32 @@ def run_lca(
             NH3_electrolysis_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()
             NH3_electrolysis_Scope1_EI = NH3_boiler_EI
             NH3_electrolysis_total_EI  = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
-            # Calculate steel emissions via grid only electrolysis
+
+            # Calculate steel emissions via grid only electrolysis(kg CO2e/metric tonne steel)
             steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)  
             steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()  
             steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
             steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
-        # if 'off-grid' in grid_case:
-        #     # Calculate renewable only electrolysis emissions        
-        #     electrolysis_Scope3_EI = (wind_capex_EI*hopp_finsum['Wind annual energy (MWh)'].values.tolist()[0] + solar_pv_capex_EI*hopp_finsum['Solar annual energy (MWh)'].values.tolist()[0])/h2prod_annual_sum + ely_stack_capex_EI # kg CO2e/kg H2
-        #     electrolysis_Scope2_EI = 0
-        #     electrolysis_Scope1_EI = 0
-        #     electrolysis_total_EI = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
-        #     electrolysis_total_EI_policy_offgrid = electrolysis_total_EI
-        #     electrolysis_total_EI_policy_grid = 0
-        #     # Calculate ammonia emissions via renewable electrolysis
-        #     NH3_electrolysis_Scope3_EI = NH3_H2_consume * electrolysis_total_EI + NH3_PO_consume * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
-        #     NH3_electrolysis_Scope2_EI = NH3_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
-        #     NH3_electrolysis_Scope1_EI = NH3_boiler_EI
-        #     NH3_electrolysis_total_EI = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
-        #     # Calculate steel emissions via renewable electrolysis
-        #     steel_electrolysis_Scope3_EI = (steel_H2_consume * electrolysis_total_EI * MT_to_kg_conv + steel_lime_EI * steel_lime_consume * MT_to_kg_conv + steel_iron_ore_EI  * steel_iron_ore_consume * MT_to_kg_conv + steel_NG_supply_EI * steel_NG_consume  + cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume + steel_H2O_EI * steel_H2O_consume * gal_to_ton_conv)  # kg CO2e/metric tonne steel
-        #     steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() 
-        #     steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
-        #     steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
+        if 'off-grid' in grid_case:
+            # Calculate renewable only electrolysis emissions        
+            electrolysis_Scope3_EI = ely_stack_capex_EI + (((wind_capex_EI * g_to_kg * wind_annual_energy_kwh) + (solar_pv_capex_EI * g_to_kg * solar_pv_annual_energy_kwh)) /h2prod_annual_sum)
+            electrolysis_Scope2_EI = 0
+            electrolysis_Scope1_EI = 0
+            electrolysis_total_EI = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
+            electrolysis_total_EI_policy_offgrid = electrolysis_total_EI
+            #TODO: Masha, shouldn't electrolysis_total_EI_policy_grid still include ely_stack_capex_EI?
+            electrolysis_total_EI_policy_grid = 0
+
+            # Calculate ammonia emissions via renewable electrolysis
+            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            NH3_electrolysis_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()
+            NH3_electrolysis_Scope1_EI = NH3_boiler_EI
+            NH3_electrolysis_total_EI = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
+            # Calculate steel emissions via renewable electrolysis
+            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI * steel_iron_ore_consume * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)
+            steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() 
+            steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
+            steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
         
         # electrolysis_Scope3_emission_intensity.append(electrolysis_Scope3_EI)
         # electrolysis_Scope2_emission_intensity.append(electrolysis_Scope2_EI)
