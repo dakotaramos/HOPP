@@ -42,7 +42,7 @@ class CambiumData(Resource):
         path_resource: directory where to save downloaded files
         filepath: file path of resource file to load
         use_api: Make an API call even if there is an existing data file. Default == False
-        kwargs: additiona keyword arguments
+        kwargs: additional keyword arguments
 
     """
 
