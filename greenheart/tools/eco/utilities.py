@@ -1443,7 +1443,7 @@ def save_energy_flows(
     # x 1. define conversions
     # 2. pull greet values (start- pull all, optimal- based on hopp/system config)
     # 3. define variables to each years LCA calculation data
-    # 4. logic to convert atb_year to cambium_year (+5 yrs)
+    # x 4. logic to convert atb_year to cambium_year (+5 yrs)
     # 5. define lists to hold data for all LCA calculations / cambium years
     # 6. read in hopp data as df (energy to electrolyzer kwh, energy from grid kwh, energy from renewables kwh, total energy kwh)
     # 7. loop through cambium files, read in data, concat with hopp data, perform calculations based on grid case, append data to lists from 5
@@ -1459,239 +1459,54 @@ def save_energy_flows(
     # grid_case put in greenheart_config as input
 
 def run_lca(
+    hopp_results,
+    electrolyzer_physics_results,
     greenheart_config,
     hopp_config,
     ):
 
-    ## Conversions
-    # Unit conversions
-    mmbtu_to_kWh = 293.07107                # 1 MMbtu = 293.07107 kWh 
-    mmbtu_to_MWh = 0.29307107               # 1 MMbtu = 0.29307107 MWh
-    mmbtu_to_MJ = 1055.055853               # 1 MMbtu = 1055.055853 MJ
-    mmbtu_to_GJ = 1.05505853                # 1 MMbtu = 1.055055853 GJ
-    kWh_to_MJ = 3.6                         # 1 kWh = 3.6 MJ
-    MJ_to_kWh = (1/3.6)                     # 1 MJ = (1/3.6) kWh ~= 0.2777777777777778 kWh
-    btu_to_kWh = 0.00029307107              # 1 btu = 0.00029307107 kWh
-    btu_to_MJ = 0.00105506                  # 1 btu = 0.00105506 MJ 
-    ton_to_kg = 907.18474                   # 1 ton = 907.18474 kg
-    ton_to_MT = 0.90718474                  # 1 ton = 0.90718474 metric tonne
-    g_to_kg  = 0.001                        # 1 g = 0.001 kg
-    kg_to_MT = 0.001                        # 1 kg = 0.001 metric tonne
-    MT_to_kg = 1000                         # 1 metric tonne = 1000 kg
-    kWh_to_MWh = 0.001                      # 1 kWh = 0.001 MWh
-
-    # Chemical properties
-    kg_h2_to_mmbtuhhv_h2 = 0.1341                       # 1 kg H2 = 0.1341 MMbtu-hhv h2
-    mmbtuhhv_h2_to_kg_h2 = 7.4571215511                 # 1 MMbtu-hhv H2 = 7.4571215511 kg H2
-    kg_h2_to_mmbtulhv_h2 = 0.114                        # 1 kg H2 = 0.114 MMbtu-lhv H2
-    mmbtulhv_h2_to_kg_h2 = 7.1428571429                 # 1 MMbtu-lhv H2 = 7.1428571429 kg H2
-    kg_CH4_to_kg_CO2e = 29.8                            # 1 kg CH4 = 29.8 kg CO2e 
-    MJHHV_per_kg_h2 = 141.88                            # Higher Heating Value of hydrogen = 141.88 MJ-HHV/kg H2
-    MJLHV_per_kg_h2 = 119.96                            # Lower Heating Value of hydrogen = 119.96 MJ-LHV/kg H2
-    kWh_per_kg_h2_LHV = (MJLHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using LHV, ~= 33.3222222 kWh/kg H2
-    kWh_per_kg_h2_HHV = (MJHHV_per_kg_h2 * MJ_to_kWh)   # kWh per kg of hydrogen using HHV, ~= 39.4111111 kWh/kg H2
-    gal_H2O_to_MT = 0.00378541                          # 1 US gallon of H2O = 0.00378541 metric tonnes (1 gal = 3.78541 liters, 1 liter H2O = 1 kg, 1000 kg = 1 metric tonne)
-    MMBTU_NG_to_kg_CO2e = 53                            # 1 MMBTU Natural Gas = ~53kg CO2e
-
-    # Chemical conversion formulas for greenhouse gases (GHGs) to CO2e emissions intensities (EI) with GWP and Carbon ratios
-    # CO2 (VOC, CO, CO2) = CO2 + (VOC*0.85/0.27) + (CO*0.43/0.27)
-    # GHGs = CO2 (VOC, CO, CO2) + (CH4*29.8) + (N2O)*273 + (VOC*0) + (CO*0) + (NOx*0) + (BC*0) + (OC*0)
-    # GHGs = CO2 + (VOC*0.85/0.27) + (CO*0.43/0.27) + (CH4*29.8) + (N20*273)
-    # Carbon Ratios
-    VOC_to_CO2e = (0.85/0.272727)
-    CO_to_CO2e = (0.4285710/0.272727)
-    CH4_to_CO2e = (.75/.272727)
-    # Global Warming Potential (relative to CO2)
-    CH4_gwp_to_CO2e = 29.8
-    N2O_gwp_to_CO2e = 273
-    
-
-    ## Define project_lifetime
-    project_lifetime = greenheart_config["project_parameters"]["project_lifetime"]
-
-    ## GREET Data
-    # Hardcoded values for efficiencies, emissions intensities (EI), combustion, consumption, and production processes
-    #TODO: In future, update to pull hardcoded values from GREET or other models programmatically if possible
-    # Following values determined through communications with GREET / ANL team
-    NH3_boiler_EI = 0.5             # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
-    # smr_NG_combust = 56.2         # NOTE: possibly pull from greet1 > hydrogen > C427+C459 Natural gas combustion from SMR (g CO2e/MJ)
-    smr_HEX_eff = 0.9               # Heat exchange efficiency (%)
-    smr_NG_supply = 9               # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
-    ccs_PO_consume = 0              # Power consumption for CCS (kWh/kg CO2)
-    atr_steam_prod = 0              # No steam exported during ATR (MJ/kg H2)
-    atr_ccs_steam_prod = 0          # No steam exported during ATR (MJ/kg H2)
-
-    # Following values determined through communications with LBNL
-    # TODO: confirm / validate we can pull these values from Greet with Masha (compare original values with GREET values)
-    # steel_H2_consume = 0.06596      # NOTE: possibly pull from Greet2 > Steel > AK66, Metric tonnes of H2 per tonne of steel (ton H2/ton steel), from comms with LBNL
-    # steel_NG_consume = 0.71657      # NOTE: possibly pull from Greet2 > Steel > AE63+AG63+AK63+AM63 OR AE78+AG78+AK78+AM78, GJ-LHV per tonne of steel (GJ-LHV/ ton steel), from comms with LBNL
-    # steel_lime_consume = 0.01812    # NOTE: possibly pull from Greet2 > Steel > AM68, metric tonne of lime per tonne of steel (ton lime / ton steel), from comms with LBNL
-    # steel_iron_ore_consume = 1.629  # NOTE: possilby pull from Greet2 > Steel > AM69, metric tonnes of iron ore per metric tonne of steel, from comms with LBNL
-    # steel_PO_consume = 0.5502       # NOTE: possibly pull from Greet2 > Steel > Y108, MWh per metric tonne of steel, from comms with LBNL
-    # steel_H2O_consume = 0.8037      # NOTE: possibly pull from Greet2 > Steel > Y113, metric tonnes of H2O per tonne of steel, from comms with LBNL
-    
-    # Following values determined from prior NREL knowledge of electrolysis and assumptions about future grid mix
-    grid_trans_losses = 0.05    # Grid losses of 5% are assumed (-)
-    fuel_to_grid_curr = 48      # Fuel mix emission intensity for current power grid (g CO2e/kWh)
-    fuel_to_grid_futu = 14      # Fuel mix emission intensity for future power grid (g CO2e/kWh) #TODO: define future power grid
-    ely_PO_consume = 55         # Electrolysis power consumption per kg h2 (kWh/kg H2)
-
-    # Define GREET directories
-    greet_2023_root_dir = ROOT_DIR / "simulation" / "resource_files" / "greet" / "2023"
-    greet_2023_blue_NH3_dir = greet_2023_root_dir / "blue_NH3_prod"
-    greet_2023_green_NH3_dir = greet_2023_root_dir / "green_NH3_prod"
-    greet_2023_conventional_NH3_dir = greet_2023_root_dir / "conventional_NH3_prod"
-    greet_2023_ccs_central_h2_dir = greet_2023_root_dir / "ccs_central_h2_prod"
-    greet_2023_no_ccs_central_h2_dir = greet_2023_root_dir / "no_ccs_central_h2_prod"
-    # Define GREET filepaths
-    greet1_2023_blue_NH3 = greet_2023_blue_NH3_dir / "GREET1_2023_Rev1.xlsm"
-    greet2_2023_blue_NH3 = greet_2023_blue_NH3_dir / "GREET2_2023_Rev1.xlsm"
-    greet1_2023_green_NH3 = greet_2023_green_NH3_dir / "GREET1_2023_Rev1.xlsm"
-    greet2_2023_green_NH3 = greet_2023_green_NH3_dir / "GREET2_2023_Rev1.xlsm"
-    greet1_2023_conventional_NH3 = greet_2023_conventional_NH3_dir / "GREET1_2023_Rev1.xlsm"
-    greet2_2023_conventional_NH3 = greet_2023_conventional_NH3_dir / "GREET2_2023_Rev1.xlsm"
-    greet1_2023_ccs_central_h2 = greet_2023_ccs_central_h2_dir / "GREET1_2023_Rev1.xlsm"
-    greet2_2023_ccs_central_h2 = greet_2023_ccs_central_h2_dir / "GREET2_2023_Rev1.xlsm"
-    greet1_2023_no_ccs_central_h2 = greet_2023_no_ccs_central_h2_dir / "GREET1_2023_Rev1.xlsm"
-    greet2_2023_no_ccs_central_h2 = greet_2023_no_ccs_central_h2_dir / "GREET2_2023_Rev1.xlsm"
-
-    # Pull GREET Values
-    #------------------------------------------------------------------------------
-    # Renewable infrastructure embedded emission intensities
-    #------------------------------------------------------------------------------
-    # NOTE: capex emissions agnostic of ccs/no_ccs and NH3 production methods, ie: can use any version of greet to pull
-    # TODO: update to pull from whatever files need to be opened based on ccs/no_ccs and NH3 config
-    # TODO: update conversion of battery_X_EI values (confirm with Masha)
-    with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
-        wind_capex_EI = (greet1['ElecInfra']['G112'].value * (1/mmbtu_to_kWh))                      # Wind CAPEX emissions (g CO2e/kWh)
-        solar_pv_capex_EI = (greet1['ElecInfra']['H112'].value * (1/mmbtu_to_kWh))                  # Solar PV CAPEX emissions (g CO2e/kWh)
-        nuclear_PWR_capex_EI = (greet1['ElecInfra']['D112'].value * (1/mmbtu_to_kWh))               # Nuclear Pressurized Water Reactor (PWR) CAPEX emissions (g CO2e/kWh)
-        nuclear_BWR_capex_EI = (greet1['ElecInfra']['E112'].value * (1/mmbtu_to_kWh))               # Nuclear Boiling Water Reactor (BWR) CAPEX emissions (g CO2e/kWh)
-        coal_capex_EI = (greet1['ElecInfra']['B112'].value * (1/mmbtu_to_kWh))                      # Coal CAPEX emissions (g CO2e/kWh)
-        gas_capex_EI = (greet1['ElecInfra']['C112'].value * (1/mmbtu_to_kWh))                       # Natural Gas Combined Cycle (NGCC) CAPEX emissions (g CO2e/kWh)
-        hydro_capex_EI = (greet1['ElecInfra']['F112'].value * (1/mmbtu_to_kWh))                     # Hydro CAPEX emissions (g CO2e/kWh)
-        bio_capex_EI = (greet1['ElecInfra']['L112'].value * (1/mmbtu_to_kWh))                       # Biomass CAPEX emissions (g CO2e/kWh)
-        geothermal_EGS_capex_EI = (greet1['ElecInfra']['I112'].value * (1/mmbtu_to_kWh))            # Geothermal EGS CAPEX emissions (g CO2e/kWh)
-        geothermal_flash_capex_EI = (greet1['ElecInfra']['J112'].value * (1/mmbtu_to_kWh))          # Geothermal Flash CAPEX emissions (g CO2e/kWh)
-        geothermal_binary_capex_EI = (greet1['ElecInfra']['K112'].value * (1/mmbtu_to_kWh))         # Geothermal Binary CAPEX emissions (g CO2e/kWh)
-
-    with openpyxl.load_workbook(greet2_2023_ccs_central_h2, data_only=True) as greet2:
-        pem_ely_stack_capex_EI = (greet2['Electrolyzers']['L257'].value * g_to_kg)                  # PEM electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
-        pem_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['I257'].value * g_to_kg)          # PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
-        battery_residential_EI = (greet2['Solar_PV']['DI289'].value)                                #TODO: convert from (g CO2e / PV system life) to (g CO2e/kWh) # Battery embodied emissions for residential solar PV applications (g CO2e/kWh), assumed LFP batteries
-        battery_commercial_EI = (greet2['Solar_PV']['DJ289'].value)                                 #TODO: convert from (g CO2e / PV system life) to (g CO2e/kWh) # Battery embodied emissions for commercial solar PV applications (g CO2e/kWh), assumed LFP batteries
-
-    #------------------------------------------------------------------------------
-    # Steam methane reforming (SMR) and Autothermal Reforming (ATR) - Incumbent H2 production processes
-    #------------------------------------------------------------------------------
-    #TODO: Confirm with Masha correct conversions, specifically use of LHV for CCS and HHV for no CCS
-    # Values with Carbon Capture Sequestration (CCS)
-    with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
-        smr_NG_ccs_consume = (greet1['Hydrogen']['C392'].value * (btu_to_MJ/MJLHV_per_kg_h2))               # SMR w/ CCS Well to Gate (WTG) Natural Gas (NG) consumption (MJ-LHV/kg H2)
-        smr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['L392'].value * (btu_to_MJ/MJLHV_per_kg_h2))          # SMR w/ CCS WTG Renewable Natural Gas (RNG) consumption (MJ-LHV/kg H2)
-        smr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['C389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))     # SMR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['L389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))    # SMR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_NG_ccs_combust = ((greet1_ccs['Hydrogen']['C427'].value + greet1_ccs['Hydrogen']['C459'].value) # SMR via NG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-        smr_RNG_ccs_combust = ((greet1_ccs['Hydrogen']['L427'].value + greet1_ccs['Hydrogen']['L459'].value)# SMR via RNG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-        smr_ccs_steam_prod = (greet1_ccs['Inputs']['I1105'].value * (btu_to_MJ/MJLHV_per_kg_h2))            # NOTE: value = 0, no steam exported w/ CCS? SMR Steam exported w/ CCS (MJ/kg H2)
-        smr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B11'].value)                                        # CCS rate for SMR (%)
-        atr_NG_ccs_consume = (greet1_ccs['Hydrogen']['N392'].value * (btu_to_MJ/MJLHV_per_kg_h2))           # ATR w/ CCS WTG NG consumption (MJ-LHV/kg H2)
-        atr_RNG_ccs_consume = (greet1_ccs['Hydrogen']['O392'].value * (btu_to_MJ/MJLHV_per_kg_h2))          # ATR w/ CCS WTG RNG consumption (MJ-LHV/kg H2)
-        atr_NG_PO_ccs_consume = (greet1_ccs['Hydrogen']['N389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))     # ATR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_RNG_PO_ccs_consume = (greet1_ccs['Hydrogen']['O389'].value * (btu_to_kWh/kWh_per_kg_h2_LHV))    # ATR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_NG_ccs_combust = ((greet1_ccs['Hydrogen']['N427'].value + greet1_ccs['Hydrogen']['N459'].value) # ATR via NG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-        atr_RNG_ccs_combust = ((greet1_ccs['Hydrogen']['O427'].value + greet1_ccs['Hydrogen']['O459'].value)# ATR via RNG w/ CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-        atr_ccs_perc_capture = (greet1_ccs['Hydrogen']['B15'].value)                                        # CCS rate for Autothermal Reforming (%)
-    
-    # Values without CCS
-    with openpyxl.load_workbook(greet1_2023_no_ccs_central_h2, data_only=True) as greet1:
-        smr_NG_consume = (greet1['Hydrogen']['C392'].value * (btu_to_MJ/MJHHV_per_kg_h2))               # SMR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
-        smr_RNG_consume = (greet1['Hydrogen']['L392'].value * (btu_to_MJ/MJHHV_per_kg_h2))              # SMR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
-        smr_NG_PO_consume = (greet1['Hydrogen']['C389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))         # SMR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_RNG_PO_consume = (greet1['Hydrogen']['L389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))        # SMR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
-        smr_NG_combust = ((greet1_ccs['Hydrogen']['C427'].value + greet1_ccs['Hydrogen']['C459'].value) # SMR via NG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-        smr_RNG_combust = ((greet1_ccs['Hydrogen']['L427'].value + greet1_ccs['Hydrogen']['L459'].value)# SMR via RNG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-        smr_steam_prod = (greet1['Inputs']['I1105'].value * (btu_to_MJ/MJHHV_per_kg_h2))                # SMR Steam exported w/out CCS (MJ/kg H2)
-        atr_NG_consume = (greet1['Hydrogen']['N392'].value) * (btu_to_MJ/MJHHV_per_kg_h2)               # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
-        atr_RNG_consume = (greet1['Hydrogen']['O392'].value * (btu_to_MJ/MJHHV_per_kg_h2))              # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
-        atr_NG_PO_consume = (greet1['Hydrogen']['N389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))         # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS, ATR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_RNG_PO_consume = (greet1['Hydrogen']['O389'].value * (btu_to_kWh/kWh_per_kg_h2_HHV))        # NOTE: same value as w/ CCS enabled, no pathway for ATR w/out CCS # ATR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
-        atr_NG_combust = ((greet1_ccs['Hydrogen']['N427'].value + greet1_ccs['Hydrogen']['N459'].value) # ATR via NG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-        atr_RNG_combust = ((greet1_ccs['Hydrogen']['O427'].value + greet1_ccs['Hydrogen']['O459'].value)# ATR via RNG w/out CCS Natural Gas combustion emissions (g CO2e/MJ)
-                                * (CH4_to_CO2e * CH4_gwp_to_CO2e / mmbtu_to_MJ))
-
-    #------------------------------------------------------------------------------
-    # Ammonia (NH3)
-    #------------------------------------------------------------------------------
-    #NOTE: Hydrogen consumption for conventional / blue NH3 production not explicitly given in GREET. 
-        #  However, value is constant for NH3 from coal/poplar gasification, PEM electrolysis, and GREEN Ammonia ~= 0.197 (kg h2/kg NH3)
-        #  Thus, using this value for all NH3 production pathways
-    # Values for Green NH3
-    with openpyxl.load_workbook(greet1_2023_green_NH3, data_only=True) as greet1:
-        green_NH3_H2_consume = (greet1['Ag_Inputs']['AM54'].value)                                  # Green Ammonia production Hydrogen consumption (kg H2/kg NH3)
-        green_NH3_PO_consume = (greet1['Hydrogen']['B359'].value * btu_to_kWh)                      # Green Ammonia production Total Energy consumption (kWh/kg NH3)
-    
-    # Values for Blue NH3
-    with openpyxl.load_workbook(greet1_2023_blue_NH3, data_only=True) as greet1:
-        blue_NH3_H2_consume = (greet1['Ag_Inputs']['AM54'].value)                                   # Blue Ammonia production Hydrogen consumption (kg H2/kg NH3)
-        blue_NH3_PO_consume = (greet1['Hydrogen']['B359'].value * btu_to_kWh)                       # Blue Ammonia production Total Energy consumption (kWh/kg NH3)
-    
-    # Values for Conventional NH3
-    with openpyxl.load_workbook(greet1_2023_conventional_NH3, data_only=True) as greet1:
-        conventional_NH3_H2_consume = (greet1['Ag_Inputs']['AM54'].value)                           # Conventional Ammonia production Hydrogen consumption (kg H2/kg NH3)
-        conventional_NH3_PO_consume = (greet1['Hydrogen']['B359'].value * btu_to_kWh)               # Conventional Ammonia production Total Energy consumption (kWh/kg NH3)
-
-    #------------------------------------------------------------------------------
-    # Steel
-    #------------------------------------------------------------------------------
-    # NOTE: steel emissions agnostic of ccs/no_ccs and NH3 production methods, ie: can use any version of greet to pull
-    # TODO: update to pull from whatever files need to be opened based on ccs/no_ccs and NH3 config
-    # NOTE: Alternative DRI-EAF configurations (w/ and w/out scrap, H2 vs NG) found in greet2 > Steel > W107:Z136
-            # Iron or vs scrap % controlled by B24:C24 values
-    # NOTE: greet2 > Steel > B17:B18 controls NG vs RNG, changing these values drastically changes steel_NG_supply_EI
-        # May require hosting of different steel config GREET versions if desired ^
-    # Values for DRI-EAF 83% H2, 100% DRI 0% Scrap
-    with openpyxl.load_workbook(greet2_2023_ccs_central_h2, data_only=True) as greet2:
-        steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg * (1/ton_to_MT))                            # CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
-        steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg * (1/ton_to_MT))                                              # CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
-        steel_NG_supply_EI = ((greet2['Steel']['B260'].value + (greet2['Steel']['B250'].value * VOC_to_CO2e) +                  # NOTE: these are upstream emissions of NG, not exact emissions of NG used in steel process, Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
-                              (greet2['Steel']['B251'].value * CO_to_CO2e) + (greet2['Steel']['B258'].value * CH4_gwp_to_CO2e) + 
-                              (greet2['Steel']['B259'].value * N2O_gwp_to_CO2e)
-                              ) * (1/mmbtu_to_MJ)
-                             )
-        steel_iron_ore_EI = ((greet2['Steel']['B92'].value + (greet2['Steel']['B82'].value * VOC_to_CO2e) +                     # Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
-                             (greet2['Steel']['B83'].value * CO_to_CO2e) + (greet2['Steel']['B90'].value * CH4_gwp_to_CO2e) + 
-                             (greet2['Steel']['B91'].value * N2O_gwp_to_CO2e)
-                             ) * g_to_kg * (1/ton_to_kg)
-                            )
-        # TODO: confirm / validate we can pull these values from Greet with Masha (compare original values with GREET values)
-        steel_H2O_EI = (MMBTU_NG_to_kg_CO2e / greet2['Steel']['B249'].value)                                                    # NOTE: original value = 0.00013, current value = 15.33, Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20)      
-        steel_H2O_consume = (greet2['Steel']['Y113'].value * (gal_H2O_to_MT/ton_to_MT))                                         # NOTE: original value = 0.8037, current value = 6.296, H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
-        steel_H2_consume = (greet2['Steel']['AK66'].value * (mmbtu_to_MJ/MJLHV_per_kg_h2) * (kg_to_MT/ton_to_MT))               # NOTE: original value = 0.06596, current value = 0.08184, Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
-        steel_NG_consume = ((greet['Steel']['AE63'].value + greet['Steel']['AG63'].value +                                      # NOTE: original value = 0.71657, current value = 4.5729, Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
-                            greet['Steel']['AK63'].value + greet['Steel']['AM63'].value) * (mmbtu_to_GJ/ton_to_MT))
-        steel_lime_consume = (greet['Steel']['AM68'].value)                                                                     # NOTE: original value = 0.01812, current value = 0.01269, Lime consumption for DRI-EAF Steel production (metric tonne lime/metric tonne steel production)
-        steel_iron_ore_consume = (greet['Steel']['AM69'].value)                                                                 # NOTE: original value = 1.629, current value = 1.82333, Iron ore consumption for DRI-EAF Steel production (metric tonne iron ore/metric tonne steel production)
-        steel_PO_consume = (greet2['Steel']['Y108'].value * (mmbtu_to_MWh/ton_to_MT))                                           # NOTE: original value = 0.5502, current = 10.8484, Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
-        
-    with openpyxl.load_workbook(greet1_2023_ccs_central_h2, data_only=True) as greet1:
-        steel_lime_EI = (greet1['Chemicals']['BA247'].value * g_to_kg * (1/ton_to_kg))                                          # Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
-    
-    # Load HOPP Financial Summary Data:
+    # Load HOPP Data:
+        #look at greenheart/tools/eco/
         # hopp_finsum data used in original LCA analysis:
-            # Solar Capacity MW
-            # Battery Storage capcity (MW)
-            # Wind annual energy (MWh)
+            # Wind annual energy (MWh) 
+                # hopp_results['annual_energies']['wind'] == (kWh)
+                # hi.system.wind.annual_energy_kwh
             # Solar annual energy (MWh)
-            
+                # hopp_results['annual_energies']['pv'] == (kWh)
+                # hi.system.pv.annual_energy_kwh
+        # hopp_profiles data used in origian LCA analysis: (I believe this is energy for electrolysis only, confirm with Masha)
+            # Energy to electrolyzer (kWh) 8760
+                # electrolyzer_physics_results['power_to_electrolyzer_kw']
+                    # output from run_h2_PEM()
+                # hourly_energy_breakdown['electrolyzer energy hourly [kW]'] (output from save_energy_flows)
+            # Energy from renewables (kWh) 8760 
+                # hopp_results['combined_hybrid_power_production_hopp]
+            # Energy from grid (kWh) 8760  
+                # energy_to_electrolyzer - energy_to_electrolyzer_from_renewables
+                # 
+                # electrolysis.py -> energy_from_grid = power_to_electrolyzer_kw - np.asarray(hopp_results["combined_hybrid_power_production_hopp"])
+            # Hydrogen Hourly Production (kg) 8760 -> electrolyzer_physics_results['Hydrogen Hourly ..]
+    
+    project_lifetime = greenheart_config['project_parameters']['project_lifetime']
+    wind_annual_energy_kwh = hopp_results['annual_energies']['wind']
+    solar_pv_annual_energy_kwh = hopp_results['annual_energies']['pv']
+    battery_system_capacity_kwh = hopp_results['hybrid_plant'].battery.system_capacity_kwh
+    energy_to_electrolyzer = np.array(electrolyzer_physics_results['power_to_electrolyzer_kw'])
+    energy_to_electrolyzer_from_renewables = np.array(hopp_results['combined_hybrid_power_production_hopp'])
+    energy_to_electrolyzer_from_grid = energy_to_electrolyzer - energy_to_electrolyzer_from_renewables
+    # Sets energy from grid to zero if negative (some cases where energy to electrolyzer = 0 but energy from renewables > 0, other cases where floating point precision results in negative value from grid)
+    energy_to_electrolyzer_from_grid = np.maximum(energy_to_electrolyzer_from_grid,0)
+    h2_hourly_prod_kg = np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]'])
 
+    # Create dataframe for electrolyzer power profiles
+    electrolyzer_profiles_data_dict = {'Energy to electrolyzer (kWh)': energy_to_electrolyzer,
+                                       'Energy from grid (kWh)': energy_to_electrolyzer_from_grid,
+                                       'Energy from renewables (kWh)': energy_to_electrolyzer_from_renewables,
+                                       'Hydrogen Hourly production (kg)': h2_hourly_prod_kg}
+    electrolyzer_profiles_df = pd.DataFrame(data=electrolyzer_profiles_data_dict)
+    electrolyzer_profiles_df = electrolyzer_profiles_df.reset_index().rename(columns={'index':'Interval'})
+    electrolyzer_profiles_df['Interval'] = electrolyzer_profiles_df['Interval']+1
+    electrolyzer_profiles_df = electrolyzer_profiles_df.set_index('Interval')
 
     # Instantiate object to hold EI values
     smr_Scope3_EI = 'NA'
@@ -1760,17 +1575,146 @@ def run_lca(
     steel_smr_ccs_Scope2_emission_intensity = []
     steel_smr_ccs_emission_intensity = []
     
+    ## GREET Data
+    # Define conversions
+    g_to_kg  = 0.001            # 1 g = 0.001 kg
+    kWh_to_MWh = 0.001          # 1 kWh = 0.001 MWh
+    MWh_to_kWh = 1000           # 1 MWh = 1000 kWh
+    # Load GREEET Data
+    greet_data = GreetData(greet_year=2023)
+    greet_data_dict = greet_data.data
+    #------------------------------------------------------------------------------
+    # Renewable infrastructure embedded emission intensities
+    #------------------------------------------------------------------------------
+    #TODO: add electrolyzer type (PEM, alkaline, SOEC) to lca_config yaml
+    if greenheart_config['lca_config']['electrolyzer_type'] == 'PEM':
+        ely_stack_capex_EI = greet_data_dict['pem_ely_stack_capex_EI']                                                  # PEM electrolyzer CAPEX emissions (kg CO2e/kg H2)
+        ely_stack_and_BoP_capex_EI = greet_data_dict['pem_ely_stack_and_BoP_capex_EI']                                  # PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+    elif greenheart_config['lca_config']['electrolyzer_type'] == 'Alkaline':
+        ely_stack_capex_EI = greet_data_dict['alk_ely_stack_capex_EI']                                                  # Alkaline electrolyzer CAPEX emissions (kg CO2e/kg H2)
+        ely_stack_and_BoP_capex_EI = greet_data_dict['alk_ely_stack_and_BoP_capex_EI']                                  # Alkaline electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+    elif greenheart_config['lca_config']['electrolyzer_type'] == 'SOEC':
+        ely_stack_capex_EI = greet_data_dict['soec_ely_stack_capex_EI']                                                 # SOEC electrolyzer CAPEX emissions (kg CO2e/kg H2)
+        ely_stack_and_BoP_capex_EI = greet_data_dict['soec_ely_stack_and_BoP_capex_EI']                                 # SOEC electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+    wind_capex_EI = greet_data_dict['wind_capex_EI']                                                                    # Wind CAPEX emissions (g CO2e/kWh)
+    solar_pv_capex_EI = greet_data_dict['solar_pv_capex_EI']                                                            # Solar PV CAPEX emissions (g CO2e/kWh)
+    #TODO: add battery / PV install type (residential vs commercial) to lca_config yaml
+    if greenheart_config['lca_config']['battery_install_type'] == 'Residential':
+        battery_EI = greet_data_dict['battery_LFP_residential_EI'] * (project_lifetime/battery_system_capacity_kwh)     # Battery embodied emissions for residential solar PV applications (g CO2e/kWh)
+    elif greenheart_config['lca_config']['battery_install_type'] == 'Commercial':
+        battery_EI = greet_data_dict['battery_LFP_commercial_EI'] * (project_lifetime/battery_system_capacity_kwh)      # Battery embodied emissions for commercial solar PV applications (g CO2e/kWh)
+    #TODO: add nuclear type (BWR vs PWR) to lca_config yaml
+    if greenheart_config['lca_config']['nuclear_type'] == 'BWR':
+        nuclear_capex_EI = greet_data_dict['nuclear_BWR_capex_EI']                                                      # Nuclear Boiling Water Reactor (BWR) CAPEX emissions (g CO2e/kWh)
+    elif greenheart_config['lca_config']['nuclear_type'] == 'PWR':
+        nuclear_capex_EI = greet_data_dict['nuclear_PWR_capex_EI']                                                      # Nuclear Pressurized Water Reactor (PWR) CAPEX emissions (g CO2e/kWh)
+    coal_capex_EI = greet_data_dict['coal_capex_EI']                                                                    # Coal CAPEX emissions (g CO2e/kWh)
+    gas_capex_EI = greet_data_dict['gas_capex_EI']                                                                      # Natural Gas Combined Cycle (NGCC) CAPEX emissions (g CO2e/kWh)
+    hydro_capex_EI = greet_data_dict['hydro_capex_EI']                                                                  # Hydro CAPEX emissions (g CO2e/kWh)
+    bio_capex_EI = greet_data_dict['bio_capex_EI']                                                                      # Biomass CAPEX emissions (g CO2e/kWh)
+    #TODO: add geothermal type (EGS, binary, flash) to lca_config yaml
+    if greenheart_config['lca_config']['geothermal_type'] == 'EGS':
+        geothermal_capex_EI = greet_data_dict['geothermal_EGS_capex_EI']                                                # Geothermal EGS CAPEX emissions (g CO2e/kWh)
+    elif greenheart_config['lca_config']['geothermal_type'] == 'Binary':
+        geothermal_capex_EI = greet_data_dict['geothermal_binary_capex_EI']                                             # Geothermal Binary CAPEX emissions (g CO2e/kWh)
+    elif greenheart_config['lca_config']['geothermal_type'] == 'Flash':
+        geothermal_capex_EI = greet_data_dict['geothermal_flash_capex_EI']                                              # Geothermal Flash CAPEX emissions (g CO2e/kWh)
+
+    #------------------------------------------------------------------------------
+    # Steam methane reforming (SMR) and Autothermal Reforming (ATR) - Incumbent H2 production processes
+    #------------------------------------------------------------------------------
+    #TODO: add ATR vs SMR to lca_config and add logic to set properly
+    smr_HEX_eff = greet_data_dict['smr_HEX_eff']                                                                        # SMR Heat exchange efficiency (%)
+    smr_NG_supply = greet_data_dict['smr_NG_supply']                                                                    # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
+    smr_NG_combust =  greet_data_dict['smr_NG_combust']                                                                 # SMR Natural gas combustion emission factor (g CO2e/MJ)
+    ccs_PO_consume = greet_data_dict['ccs_PO_consume']                                                                  # Power consumption for CCS (kWh/kg CO2)
+    smr_ccs_steam_prod = greet_data_dict['smr_ccs_steam_prod']                                                          # SMR Steam exported w/ CCS (MJ/kg H2)
+    smr_ccs_perc_capture = greet_data_dict['smr_ccs_perc_capture']                                                      # CCS rate for SMR (%)
+    atr_ccs_steam_prod = greet_data_dict['atr_ccs_steam_prod']                                                          # ATR Steam exported w/CCS (MJ/kg H2)
+    atr_ccs_perc_capture = greet_data_dict['atr_ccs_perc_capture']                                                      # CCS rate for Autothermal Reforming (%)
+    smr_steam_prod = greet_data_dict['smr_steam_prod']                                                                  # SMR Steam exported w/out CCS (MJ/kg H2)
+    atr_steam_prod = greet_data_dict['atr_steam_prod']                                                                  # ATR Steam exported w/out CCS (MJ/kg H2)
+    if greenheart_config['lca_config']['H2_prod_NG_type'] == 'NG':
+        smr_NG_ccs_consume = greet_data_dict['smr_NG_ccs_consume']                                                      # SMR w/ CCS Well to Gate (WTG) Natural Gas (NG) consumption (MJ-LHV/kg H2)
+        smr_NG_PO_ccs_consume = greet_data_dict['smr_NG_PO_ccs_consume']                                                # SMR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_NG_ccs_consume = greet_data_dict['atr_NG_ccs_consume']                                                      # ATR w/ CCS WTG NG consumption (MJ-LHV/kg H2)
+        atr_NG_PO_ccs_consume = greet_data_dict['atr_NG_PO_ccs_consume']                                                # ATR via NG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_NG_consume = greet_data_dict['smr_NG_consume']                                                              # SMR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
+        smr_NG_PO_consume = greet_data_dict['smr_NG_PO_consume']                                                        # SMR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_NG_consume = greet_data_dict['atr_NG_consume']                                                              # ATR w/out CCS WTG NG consumption (MJ-HHV/kg H2)
+        atr_NG_PO_consume = greet_data_dict['atr_NG_PO_consume']                                                        # ATR via NG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+    elif greenheart_config['lca_config']['H2_prod_NG_type'] == 'RNG':
+        smr_NG_ccs_consume = greet_data_dict['smr_RNG_ccs_consume']                                                     # SMR w/ CCS WTG Renewable Natural Gas (RNG) consumption (MJ-LHV/kg H2)
+        smr_NG_PO_ccs_consume = greet_data_dict['smr_RNG_PO_ccs_consume']                                               # SMR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_NG_ccs_consume = greet_data_dict['atr_RNG_ccs_consume']                                                     # ATR w/ CCS WTG RNG consumption (MJ-LHV/kg H2)
+        atr_NG_PO_ccs_consume = greet_data_dict['atr_RNG_PO_ccs_consume']                                               # ATR via RNG w/ CCS WTG Total Energy consumption (kWh/kg H2)
+        smr_NG_consume = greet_data_dict['smr_RNG_consume']                                                             # SMR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
+        smr_NG_PO_consume = greet_data_dict['smr_RNG_PO_consume']                                                       # SMR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+        atr_NG_consume = greet_data_dict['atr_RNG_consume']                                                             # ATR w/out CCS WTG RNG consumption (MJ-HHV/kg H2)
+        atr_NG_PO_consume = greet_data_dict['atr_RNG_PO_consume']                                                       # ATR via RNG w/out CCS WTG Total Energy consumption (kWh/kg H2)
+
+    #------------------------------------------------------------------------------
+    # Hydrogen production via water electrolysis
+    #------------------------------------------------------------------------------
+    grid_trans_losses = greet_data_dict['grid_trans_losses']                                                            # Grid losses of 5% are assumed (-)
+    fuel_to_grid_curr = greet_data_dict['fuel_to_grid_curr']                                                            # Fuel mix emission intensity for current power grid (g CO2e/kWh)
+    fuel_to_grid_futu = greet_data_dict['fuel_to_grid_futu']                                                            # Fuel mix emission intensity for future power grid (g CO2e/kWh)
+    #NOTE: GREET 2023 does not provide power consumption for SOEC or Alkaline electrolyzers
+    ely_PO_consume = greet_data_dict['pem_ely_PO_consume']                                                              # PEM Electrolysis power consumption per kg h2 (kWh/kg H2)
+
+    #------------------------------------------------------------------------------
+    # Ammonia (NH3)
+    #------------------------------------------------------------------------------
+    #TODO: add green vs blue vs conventional NH3 production type in lca_config
+    NH3_boiler_EI = greet_data_dict['NH3_boiler_EI']                                                                    # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
+    # Values for green NH3
+    if greenheart_config['lca_config']['NH3_type'] == 'Green':
+        NH3_H2_consume = greet_data_dict['green_NH3_H2_consume']                                                        # Green Ammonia production Hydrogen consumption (kg H2/kg NH3)
+        NH3_PO_consume = greet_data_dict['green_NH3_PO_consume']                                                        # Green Ammonia production Total Energy consumption (kWh/kg NH3)
+    
+    # Values for blue NH3
+    elif greenheart_config['lca_config']['NH3_type'] == 'Blue':
+        NH3_H2_consume = greet_data_dict['blue_NH3_H2_consume']                                                         # Blue Ammonia production Hydrogen consumption (kg H2/kg NH3)
+        NH3_PO_consume = greet_data_dict['blue_NH3_PO_consume']                                                         # Blue Ammonia production Total Energy consumption (kWh/kg NH3)
+
+    # Values for conventional NH3
+    elif greenheart_config['lca_config']['NH3_type'] == 'Conventional':
+        NH3_H2_consume = greet_data_dict['conventional_NH3_H2_consume']                                                 # Conventional Ammonia production Hydrogen consumption (kg H2/kg NH3)
+        NH3_PO_consume = greet_data_dict['conventional_NH3_PO_consume']                                                 # Conventional Ammonia production Total Energy consumption (kWh/kg NH3)
+
+    #------------------------------------------------------------------------------
+    # Steel
+    #------------------------------------------------------------------------------
+    # Values agnostic of DRI-EAF config
+    steel_H2O_EI = greet_data_dict['steel_H2O_EI']                                                                      # Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20) 
+    steel_NG_supply_EI = greet_data_dict['steel_NG_supply_EI']                                                          # Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
+    steel_iron_ore_EI = greet_data_dict['steel_iron_ore_EI']                                                            # Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
+    steel_iron_ore_consume = greet_data_dict['steel_iron_ore_consume']                                                  # Iron ore consumption for EAF and LRF Steel production from DRI (metric tonne iron ore/metric tonne steel production)
+    steel_lime_EI = greet_data_dict['steel_lime_EI']                                                                    # Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
+    steel_lime_consume = greet_data_dict['steel_lime_consume']                                                          # Lime consumption for EAF and LRF Steel production from DRI (metric tonne lime/metric tonne steel production)
+
+    # TODO: add DRI-EAF configuration to lca_config and add logic to set properly if desired
+    steel_CH4_prod = greet_data_dict['steel_CH4_prod']                                                                  # CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+    steel_CO2_prod = greet_data_dict['steel_CO2_prod']                                                                  # CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
+    steel_H2O_consume = greet_data_dict['steel_H2O_consume']                                                            # H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
+    steel_H2_consume = greet_data_dict['steel_H2_consume']                                                              # Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
+    steel_NG_consume = greet_data_dict['steel_NG_consume']                                                              # Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
+    steel_PO_consume = greet_data_dict['steel_PO_consume']                                                              # Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
+    
     ## Cambium
+    # Define cambium_year
+    cambium_year = (greenheart_config['project_parameters']['atb_year'] + 5)            # NOTE: current hopp logic for LCOH = atb_year + 2yr + install_period(3yrs) = 5 years
     # Pull / download cambium data files
     cambium_data = CambiumData(lat = hopp_config["site"]["data"]["lat"],
                                lon = hopp_config["site"]["data"]["lon"],
-                               year = hopp_config["site"]["data"]["year"],
+                               year = cambium_year,
                                project_uuid = greenheart_config["cambium"]["project_uuid"],
                                scenario = greenheart_config["cambium"]["scenario"],
                                location_type = greenheart_config["cambium"]["location_type"],
                                time_type = greenheart_config["cambium"]["time_type"],
                                )
 
+    # Read in Cambium data and combine with hopp electrolyzer data
     for resource_file in cambium_data.resource_files:
         cambium_data_df = pd.read_csv(resource_file,
                                       index_col= None,
@@ -1779,16 +1723,179 @@ def run_lca(
                                                  'generation','battery_MWh','biomass_MWh','beccs_MWh','canada_MWh','coal_MWh','coal-ccs_MWh','csp_MWh','distpv_MWh',\
                                                  'gas-cc_MWh','gas-cc-ccs_MWh','gas-ct_MWh','geothermal_MWh','hydro_MWh','nuclear_MWh','o-g-s_MWh','phs_MWh,upv_MWh','wind-ons_MWh','wind-ofs_MWh']
                                     )
-        cambium_data_df = cambium_data_df.reset_index().rename(columns = {'index':'Interval','lrmer_co2_c':'LRMER CO2 combustion (kg-CO2/MWh)','lrmer_ch4_c':'LRMER CH4 combustion (g-CH4/MWh)',\
-                                                                          'lrmer_n2o_c':'LRMER N2O combustion (g-N2O/MWh)','lrmer_co2_p':'LRMER CO2 production (kg-CO2/MWh)',\
-                                                                          'lrmer_ch4_p':'LRMER CH4 production (g-CH4/MWh)','lrmer_n2o_p':'LRMER N2O production (g-N2O/MWh)',\
-                                                                          'lrmer_co2e_c':'LRMER CO2 equiv. combustion (kg-CO2e/MWh)','lrmer_co2e_p':'LRMER CO2 equiv. production (kg-CO2e/MWh)',\
-                                                                          'lrmer_co2e':'LRMER CO2 equiv. total (kg-CO2e/MWh)'}
-                                                                )
+        cambium_data_df = cambium_data_df.reset_index().rename(columns = {'index':'Interval',
+                                                                          'lrmer_co2_c':'LRMER CO2 combustion (kg-CO2/MWh)','lrmer_ch4_c':'LRMER CH4 combustion (g-CH4/MWh)',
+                                                                          'lrmer_n2o_c':'LRMER N2O combustion (g-N2O/MWh)','lrmer_co2_p':'LRMER CO2 production (kg-CO2/MWh)',
+                                                                          'lrmer_ch4_p':'LRMER CH4 production (g-CH4/MWh)','lrmer_n2o_p':'LRMER N2O production (g-N2O/MWh)',
+                                                                          'lrmer_co2e_c':'LRMER CO2 equiv. combustion (kg-CO2e/MWh)','lrmer_co2e_p':'LRMER CO2 equiv. production (kg-CO2e/MWh)',
+                                                                          'lrmer_co2e':'LRMER CO2 equiv. total (kg-CO2e/MWh)'})
         cambium_data_df['Interval'] = cambium_data_df['Interval']+1
         cambium_data_df = cambium_data_df.set_index('Interval')
 
+        combined_data_df = pd.concat([electrolyzer_profiles_df, cambium_data_df], axis=1)
 
+        # Calculate hourly grid emissions factors
+        combined_data_df['Total grid emissions (kg-CO2e)'] = (combined_data_df['Energy from grid (kWh)'] / 1000) * combined_data_df['LRMER CO2 equiv. total (kg-CO2e/MWh)']
+        combined_data_df['Scope 2 (combustion) grid emissions (kg-CO2e)'] = (combined_data_df['Energy from grid (kWh)'] / 1000) * combined_data_df['LRMER CO2 equiv. combustion (kg-CO2e/MWh)']
+        combined_data_df['Scope 3 (production) grid emissions (kg-CO2e)'] = (combined_data_df['Energy from grid (kWh)'] / 1000) * combined_data_df['LRMER CO2 equiv. production (kg-CO2e/MWh)']
+
+        # Calculate annual and lifetime Hydrogen production
+        h2prod_annual_sum = combined_data['Hydrogen Hourly production (kg)'].sum()
+        h2prod_life_sum = combined_data['Hydrogen Hourly production (kg)'].sum() * project_lifetime
+
+        # Sum total grid emissions
+        total_grid_emissions_annual_sum = combined_data_df['Total grid emissions (kg-CO2e)'].sum()
+        scope2_grid_emissions_annual_sum = combined_data_df['Scope 2 (combustion) grid emissions (kg-CO2e)'].sum()
+        scope3_grid_emissions_annual_sum = combined_data_df['Scope 3 (production) grid emissions (kg-CO2e)'].sum()
+        ren_annual_sum_MWh= combined_data_df['Energy from renewables (kWh)'].sum() / 1000
+        grid_annual_sum_MWh = combined_data_df['Energy from grid (kWh)'].sum() / 1000
+        grid_emission_intensity_annual_average = combined_data_df['LRMER CO2 equiv. total (kg-CO2e/MWh)'].mean()
+
+        # Calculate annual percentages of solar, wind and fossil in grid mix
+        generation_annual_total_MWh = cambium_data_df['generation'].sum()
+        generation_annual_nuclear_fraction = cambium_data_df['nuclear_MWh'].sum() / generation_annual_total_MWh
+        generation_annual_coal_oil_fraction = (cambium_data_df['coal_MWh'].sum() + cambium_data_df['coal-ccs_MWh'].sum() + cambium_data_df['o-g-s_MWh'].sum()) / generation_annual_total_MWh
+        generation_annual_gas_fraction = (cambium_data_df['gas-cc_MWh'].sum() + cambium_data_df['gas-cc-ccs_MWh'].sum() + cambium_data_df['gas-ct_MWh'].sum()) / generation_annual_total_MWh
+        generation_annual_bio_fraction = (cambium_data_df['biomass_MWh'].sum() + cambium_data_df['beccs_MWh'].sum()) / generation_annual_total_MWh
+        generation_annual_geothermal_fraction = cambium_data_df['geothermal_MWh'].sum() / generation_annual_total_MWh
+        generation_annual_hydro_fraction = (cambium_data_df['hydro_MWh'].sum() + cambium_data_df['phs_MWh'].sum()) / generation_annual_total_MWh
+        generation_annual_wind_fraction = (cambium_data_df['wind-ons_MWh'].sum() + cambium_data_df['wind-ofs_MWh'].sum()) / generation_annual_total_MWh
+        generation_annual_solar_fraction = (cambium_data_df['upv_MWh'].sum() + cambium_data_df['distpv_MWh'].sum() + cambium_data_df['csp_MWh'].sum()) / generation_annual_total_MWh
+        generation_annual_battery_fraction = (cambium_data_df['battery_MWh'].sum()) / generation_annual_total_MWh
+
+        grid_generation_fraction = {'Nuclear':generation_annual_nuclear_fraction,
+                                    'Coal & Oil':generation_annual_coal_oil_fraction,
+                                    'Gas':generation_annual_gas_fraction,
+                                    'Bio':generation_annual_bio_fraction,
+                                    'Geothermal':generation_annual_geothermal_fraction,
+                                    'Hydro':generation_annual_hydro_fraction,
+                                    'Wind':generation_annual_wind_fraction,
+                                    'Solar':generation_annual_solar_fraction,
+                                    'Battery':generation_annual_battery_fraction}
+        #NOTE: grid_imbedded_EI units (g CO2e/kwh)
+        grid_imbedded_EI = (generation_annual_nuclear_fraction * nuclear_capex_EI) + (generation_annual_coal_oil_fraction * coal_capex_EI) + (generation_annual_gas_fraction * gas_capex_EI) + (generation_annual_bio_fraction * bio_capex_EI)\
+                         + (generation_annual_geothermal_fraction * geothermal_capex_EI) + (generation_annual_hydro_fraction * hydro_capex_EI) + (generation_annual_wind_fraction * wind_capex_EI) + (generation_annual_solar_fraction * solar_pv_capex_EI)\
+                         + (generation_annual_battery_fraction * battery_EI)
+
+        if 'hybrid-grid' in grid_case:
+            # Calculate grid-connected electrolysis emissions (kg CO2e/kg H2), future cases should reflect targeted electrolyzer electricity usage
+            electrolysis_Scope3_EI = ely_stack_capex_EI + ((scope3_grid_emissions_annual_sum + (wind_capex_EI * g_to_kg * wind_annual_energy_kwh) + (solar_pv_capex_EI * g_to_kg * solar_pv_annual_energy_kwh) + (grid_imbedded_EI * g_to_kg * grid_annual_sum_MWh * MWh_to_kWh)) / h2prod_annual_sum)
+            electrolysis_Scope2_EI = scope2_grid_emissions_annual_sum / h2prod_annual_sum 
+            electrolysis_Scope1_EI = 0
+            electrolysis_total_EI  = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI 
+            electrolysis_total_EI_policy_grid = electrolysis_total_EI
+            #TODO: Masha, shouldn't electrolysis_total_EI_policy_offgrid still include ely_stack_capex_EI?
+            electrolysis_total_EI_policy_offgrid = 0 
+            # Calculate ammonia emissions via hybrid grid electrolysis (kg CO2e/kg NH3)
+            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            NH3_electrolysis_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()
+            NH3_electrolysis_Scope1_EI = NH3_boiler_EI
+            NH3_electrolysis_total_EI  = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
+            # Calculate steel emissions via hybrid grid electrolysis (kg CO2e/metric tonne steel)
+            steel_electrolysis_Scope3_EI = (steel_H2_consume * electrolysis_total_EI * MT_to_kg_conv + steel_lime_EI * steel_lime_consume * MT_to_kg_conv + steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg_conv + steel_NG_supply_EI * steel_NG_consume  + cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume + steel_H2O_EI * steel_H2O_consume * gal_to_ton_conv)  # kg CO2e/metric tonne steel
+            steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()  
+            steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
+            steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
+        #TODO: uncomment below and validate calculations
+        # if 'grid-only' in grid_case:
+        #     # Calculate SMR emissions. SMR and SMR + CCS are always grid-connected
+        #     smr_Scope3_EI = smr_NG_supply * (smr_NG_consume - smr_steam_prod/smr_HEX_eff) * g_to_kg_conv + smr_PO_consume * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv # kg CO2e/kg H2
+        #     smr_Scope2_EI = smr_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv # kg CO2e/kg H2
+        #     smr_Scope1_EI = smr_NG_combust * (smr_NG_consume - smr_steam_prod/smr_HEX_eff) * g_to_kg_conv # kg CO2e/kg H2
+        #     smr_total_EI  = smr_Scope1_EI + smr_Scope2_EI + smr_Scope3_EI
+        #     electrolysis_total_EI_policy_grid = electrolysis_total_EI
+        #     electrolysis_total_EI_policy_offgrid = 0 
+            
+        #     # Calculate ammonia emissions via SMR process
+        #     NH3_smr_Scope3_EI = NH3_H2_consume * smr_total_EI + NH3_PO_consume * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
+        #     NH3_smr_Scope2_EI = NH3_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
+        #     NH3_smr_Scope1_EI = NH3_boiler_EI
+        #     NH3_smr_total_EI = NH3_smr_Scope1_EI + NH3_smr_Scope2_EI + NH3_smr_Scope3_EI   
+            
+        #     # Calculate steel emissions via SMR process
+        #     steel_smr_Scope3_EI = (smr_total_EI * steel_H2_consume * MT_to_kg_conv + steel_lime_EI * steel_lime_consume * MT_to_kg_conv + steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg_conv + steel_NG_supply_EI * steel_NG_consume  + cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume + steel_H2O_EI * steel_H2O_consume * gal_to_ton_conv)  # kg CO2e/metric tonne steel
+        #     steel_smr_Scope2_EI = cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() * steel_PO_consume 
+        #     steel_smr_Scope1_EI = steel_CH4_prod + steel_CO2_prod
+        #     steel_smr_total_EI  = steel_smr_Scope1_EI + steel_smr_Scope2_EI + steel_smr_Scope3_EI
+            
+        #     # Calculate SMR + CCS emissions
+        #     smr_ccs_Scope3_EI = smr_NG_supply * (smr_NG_consume_CCS - smr_steam_prod/smr_HEX_eff) * g_to_kg_conv + (smr_ccs_PO_consume +  ccs_PO_consume) * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv # kg CO2e/kg H2
+        #     smr_ccs_Scope2_EI = (smr_ccs_PO_consume +  ccs_PO_consume) * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv # kg CO2e/kg H2
+        #     smr_ccs_Scope1_EI = (1-ccs_perc_capture)* smr_NG_combust * (smr_NG_consume_CCS - smr_steam_prod/smr_HEX_eff) * g_to_kg_conv # kg CO2e/kg H2
+        #     smr_ccs_total_EI  = smr_ccs_Scope1_EI + smr_ccs_Scope2_EI + smr_ccs_Scope3_EI    
+            
+        #     # Calculate ammonia emissions via SMR with CCS process
+        #     NH3_smr_ccs_Scope3_EI = NH3_H2_consume * smr_ccs_total_EI + NH3_PO_consume * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
+        #     NH3_smr_ccs_Scope2_EI = NH3_smr_Scope2_EI
+        #     NH3_smr_ccs_Scope1_EI = NH3_smr_Scope1_EI
+        #     NH3_smr_ccs_total_EI = NH3_smr_ccs_Scope1_EI + NH3_smr_ccs_Scope2_EI + NH3_smr_ccs_Scope3_EI   
+            
+        #     # Calculate steel emissions via SMR with CCS process
+        #     steel_smr_ccs_Scope3_EI = (smr_ccs_total_EI * steel_H2_consume * MT_to_kg_conv + steel_lime_EI * steel_lime_consume * MT_to_kg_conv + steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg_conv + steel_NG_supply_EI * steel_NG_consume  + cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume + steel_H2O_EI * steel_H2O_consume * gal_to_ton_conv)  # kg CO2e/metric tonne steel
+        #     steel_smr_ccs_Scope2_EI = steel_smr_Scope2_EI 
+        #     steel_smr_ccs_Scope1_EI = steel_smr_Scope1_EI 
+        #     steel_smr_ccs_total_EI  = steel_smr_Scope1_EI + steel_smr_Scope2_EI + steel_smr_ccs_Scope3_EI        
+        #     # Calculate grid-connected electrolysis emissions
+        #     electrolysis_Scope3_EI = scope3_grid_emissions_annual_sum/h2prod_annual_sum + (grid_imbedded_EI*grid_annual_sum_MWh/h2prod_annual_sum) + ely_stack_capex_EI# kg CO2e/kg H2
+        #     electrolysis_Scope2_EI = scope2_grid_emissions_annual_sum/h2prod_annual_sum 
+        #     electrolysis_Scope1_EI = 0
+        #     electrolysis_total_EI = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
+        #     # Calculate ammonia emissions via grid only electrolysis
+        #     NH3_electrolysis_Scope3_EI = NH3_H2_consume * electrolysis_total_EI + NH3_PO_consume * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
+        #     NH3_electrolysis_Scope2_EI = NH3_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
+        #     NH3_electrolysis_Scope1_EI = NH3_boiler_EI
+        #     NH3_electrolysis_total_EI  = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
+        #     # Calculate steel emissions via grid only electrolysis
+        #     steel_electrolysis_Scope3_EI = (steel_H2_consume * electrolysis_total_EI * MT_to_kg_conv + steel_lime_EI * steel_lime_consume * MT_to_kg_conv + steel_iron_ore_EI  * steel_iron_ore_consume * MT_to_kg_conv + steel_NG_supply_EI * steel_NG_consume  + cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume + steel_H2O_EI * steel_H2O_consume * gal_to_ton_conv)  # kg CO2e/metric tonne steel
+        #     steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()  
+        #     steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
+        #     steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
+        # if 'off-grid' in grid_case:
+        #     # Calculate renewable only electrolysis emissions        
+        #     electrolysis_Scope3_EI = (wind_capex_EI*hopp_finsum['Wind annual energy (MWh)'].values.tolist()[0] + solar_pv_capex_EI*hopp_finsum['Solar annual energy (MWh)'].values.tolist()[0])/h2prod_annual_sum + ely_stack_capex_EI # kg CO2e/kg H2
+        #     electrolysis_Scope2_EI = 0
+        #     electrolysis_Scope1_EI = 0
+        #     electrolysis_total_EI = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
+        #     electrolysis_total_EI_policy_offgrid = electrolysis_total_EI
+        #     electrolysis_total_EI_policy_grid = 0
+        #     # Calculate ammonia emissions via renewable electrolysis
+        #     NH3_electrolysis_Scope3_EI = NH3_H2_consume * electrolysis_total_EI + NH3_PO_consume * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
+        #     NH3_electrolysis_Scope2_EI = NH3_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() * kWh_to_MWh_conv
+        #     NH3_electrolysis_Scope1_EI = NH3_boiler_EI
+        #     NH3_electrolysis_total_EI = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
+        #     # Calculate steel emissions via renewable electrolysis
+        #     steel_electrolysis_Scope3_EI = (steel_H2_consume * electrolysis_total_EI * MT_to_kg_conv + steel_lime_EI * steel_lime_consume * MT_to_kg_conv + steel_iron_ore_EI  * steel_iron_ore_consume * MT_to_kg_conv + steel_NG_supply_EI * steel_NG_consume  + cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume + steel_H2O_EI * steel_H2O_consume * gal_to_ton_conv)  # kg CO2e/metric tonne steel
+        #     steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean() 
+        #     steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
+        #     steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
+        
+        # electrolysis_Scope3_emission_intensity.append(electrolysis_Scope3_EI)
+        # electrolysis_Scope2_emission_intensity.append(electrolysis_Scope2_EI)
+        # electrolysis_emission_intensity.append(electrolysis_total_EI)
+        # smr_Scope3_emission_intensity.append(smr_Scope3_EI)
+        # smr_Scope2_emission_intensity.append(smr_Scope2_EI)
+        # smr_emission_intensity.append(smr_total_EI)
+        # smr_ccs_Scope3_emission_intensity.append(smr_Scope3_EI)
+        # smr_ccs_Scope2_emission_intensity.append(smr_Scope2_EI)
+        # smr_ccs_emission_intensity.append(smr_ccs_total_EI)
+        # NH3_electrolysis_Scope3_emission_intensity.append(NH3_electrolysis_Scope3_EI)
+        # NH3_electrolysis_Scope2_emission_intensity.append(NH3_electrolysis_Scope2_EI)
+        # NH3_electrolysis_emission_intensity.append(NH3_electrolysis_total_EI)
+        # steel_electrolysis_Scope3_emission_intensity.append(steel_electrolysis_Scope3_EI)
+        # steel_electrolysis_Scope2_emission_intensity.append(steel_electrolysis_Scope2_EI)
+        # steel_electrolysis_emission_intensity.append(steel_electrolysis_total_EI)
+        # NH3_smr_Scope3_emission_intensity.append(NH3_smr_Scope3_EI)
+        # NH3_smr_Scope2_emission_intensity.append(NH3_smr_Scope2_EI)
+        # NH3_smr_emission_intensity.append(NH3_smr_total_EI)
+        # steel_smr_Scope3_emission_intensity.append(steel_smr_Scope3_EI)
+        # steel_smr_Scope2_emission_intensity.append(steel_smr_Scope2_EI)
+        # steel_smr_emission_intensity.append(steel_smr_total_EI)
+        # NH3_smr_ccs_Scope3_emission_intensity.append(NH3_smr_ccs_Scope3_EI)
+        # NH3_smr_ccs_Scope2_emission_intensity.append(NH3_smr_ccs_Scope2_EI)
+        # NH3_smr_ccs_emission_intensity.append(NH3_smr_ccs_total_EI)
+        # steel_smr_ccs_Scope3_emission_intensity.append(steel_smr_ccs_Scope3_EI)
+        # steel_smr_ccs_Scope2_emission_intensity.append(steel_smr_ccs_Scope2_EI)
+        # steel_smr_ccs_emission_intensity.append(steel_smr_ccs_total_EI)
 
 # set up function to post-process HOPP results
 def post_process_simulation(
@@ -2056,4 +2163,31 @@ def post_process_simulation(
         header="# " + key
     )
 
+    print("*******************TESTING******************")
+    print("IN POST_PROCESS_SIMULATION()")
+    # print("power_to_electrolyzer_kw")
+    # print(np.array(electrolyzer_physics_results['power_to_electrolyzer_kw']))
+    # print(np.array(electrolyzer_physics_results['power_to_electrolyzer_kw']).shape)
+    # print("energy_to_electrolyzer_from_renewables")
+    # print(np.array(hopp_results['combined_hybrid_power_production_hopp']))
+    # print(np.array(hopp_results['combined_hybrid_power_production_hopp']).shape)
+    # print(np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]']))
+    # print(np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]']).shape)
+    # energy_to_electrolyzer = np.array(electrolyzer_physics_results['power_to_electrolyzer_kw'])
+    # energy_to_electrolyzer_from_renewables = np.array(hopp_results['combined_hybrid_power_production_hopp'])
+    # energy_to_electrolyzer_from_grid = energy_to_electrolyzer - energy_to_electrolyzer_from_renewables
+    # energy_to_electrolyzer_from_grid = np.maximum(energy_to_electrolyzer_from_grid,0)
+    # h2_hourly_prod_kg = np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]'])
+
+    # electrolyzer_profiles_data_dict = {'Energy to electrolyzer (kWh)': energy_to_electrolyzer,
+    #                                    'Energy from grid (kWh)': energy_to_electrolyzer_from_grid,
+    #                                    'Energy from renewables (kWh)': energy_to_electrolyzer_from_renewables,
+    #                                    'Hydrogen Hourly production (kg)': h2_hourly_prod_kg}
+
+    # electrolyzer_profiles_df = pd.DataFrame(data=electrolyzer_profiles_data_dict)
+    # electrolyzer_profiles_df = electrolyzer_profiles_df.reset_index().rename(columns={'index':'Interval'})
+    # electrolyzer_profiles_df['Interval'] = electrolyzer_profiles_df['Interval']+1
+    # electrolyzer_profiles_df = electrolyzer_profiles_df.set_index('Interval')
+    # print(electrolyzer_profiles_df)
+    
     return annual_energy_breakdown, hourly_energy_breakdown
