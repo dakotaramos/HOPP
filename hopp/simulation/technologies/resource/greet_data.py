@@ -26,14 +26,14 @@ class GREETData:
 
     def __init__(
         self,
-        year: int = 2023,
+        greet_year: int = 2023,
         path_resource: Union[str, Path] = ROOT_DIR / "simulation" / "resource_files",
         filepath: Union[str, Path] ="",
         preprocess_greet: bool = False,
         **kwargs
     ):
 
-        self.year = year
+        self.year = greet_year
 
         self.__dict__.update(kwargs)
 
@@ -85,6 +85,7 @@ class GREETData:
         kg_to_MT = 0.001                                    # 1 kg = 0.001 metric tonne
         MT_to_kg = 1000                                     # 1 metric tonne = 1000 kg
         kWh_to_MWh = 0.001                                  # 1 kWh = 0.001 MWh
+        MWh_to_kWh = 1000                                   # 1 MWh = 1000 kWh
 
         # Chemical properties
         mmbtuhhv_per_kg_h2 = 0.134                          # 1 kg H2 = 0.134 MMbtu-hhv h2
@@ -115,7 +116,7 @@ class GREETData:
         #TODO: In future, update to pull hardcoded values from GREET or other models programmatically if possible
         # Following values determined through communications with GREET / ANL team
         NH3_boiler_EI = 0.5             # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
-        NG_combust = 56.2               # Natural gas combustion emission factor (g CO2e/MJ)
+        smr_NG_combust = 56.2               # Natural gas combustion emission factor (g CO2e/MJ)
         smr_HEX_eff = 0.9               # Heat exchange efficiency (%)
         smr_NG_supply = 9               # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
         ccs_PO_consume = 0              # Power consumption for CCS (kWh/kg CO2)
@@ -191,9 +192,13 @@ class GREETData:
                                                                                                         # value must be multiplied by factor = (project_lifetime / battery_system_capacity_kwh) before use in LCA calculations, opted not to divide here so value remains agnostic of project lifetime and system battery size        
         battery_LFP_commercial_EI = (greet2['Solar_PV']['DJ289'].value)                             # NOTE: original value = 20 (no indication of residential or commercial), greet value = 106362.41 (30 yrs, 100 MWh battery), Battery embodied emissions for commercial solar PV applications (g CO2e/kWh), assumed LFP batteries (can update battery chemistry in cell W155)
                                                                                                         # value must be multiplied by factor = (project_lifetime / battery_system_capacity_kwh) before use in LCA calculations, opted not to divide here so value remains agnostic of project lifetime and system battery size
-        # Electrolysis
+        # Electrolysis TODO: confirm with Masha stack or stack+BOP
         pem_ely_stack_capex_EI = (greet2['Electrolyzers']['I257'].value * g_to_kg)                  # NOTE: original value = 0.019, greet value = 0.01357 PEM electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
         pem_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['L257'].value * g_to_kg)          # NOTE: original value = 0.019, greet value = 0.03758 PEM electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+        alk_ely_stack_capex_EI = (greet2['Electrolyzers']['O257'].value * g_to_kg)                  # Alkaline electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
+        alk_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['R257'].value * g_to_kg)          # Alkaline electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
+        soec_ely_stack_capex_EI = (greet2['Electrolyzers']['C257'].value * g_to_kg)                 # SOEC electrolyzer stack CAPEX emissions (kg CO2e/kg H2)
+        soec_ely_stack_and_BoP_capex_EI = (greet2['Electrolyzers']['F257'].value * g_to_kg)         # SOEC electrolyzer stack CAPEX + Balance of Plant emissions (kg CO2e/kg H2)
         # Steel
         steel_CH4_prod = (greet2['Steel']['Y123'].value * CH4_gwp_to_CO2e * g_to_kg / ton_to_MT)                    # NOTE: original value = 39.29, greet value = 67.21, CH4 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
         steel_CO2_prod = (greet2['Steel']['Y125'].value * g_to_kg / ton_to_MT)                                      # NOTE: original value = 174.66, greet value = 1043.87, CO2 emissions for DRI-EAF Steel production w/ 83% H2 and 0% scrap (kg CO2e/metric tonne annual steel lab production)
@@ -336,7 +341,7 @@ class GREETData:
         data_dict = {
                      # Hardcoded values
                      'NH3_boiler_EI':NH3_boiler_EI,
-                     'NG_combust':NG_combust,
+                     'smr_NG_combust':smr_NG_combust,
                      'smr_HEX_eff':smr_HEX_eff,
                      'smr_NG_supply':smr_NG_supply,
                      'ccs_PO_consume':ccs_PO_consume,
@@ -360,6 +365,10 @@ class GREETData:
                      'pem_ely_PO_consume':pem_ely_PO_consume,
                      'pem_ely_stack_capex_EI':pem_ely_stack_capex_EI,
                      'pem_ely_stack_and_BoP_capex_EI':pem_ely_stack_and_BoP_capex_EI,
+                     'alk_ely_stack_capex_EI':alk_ely_stack_capex_EI,
+                     'alk_ely_stack_and_BoP_capex_EI':alk_ely_stack_and_BoP_capex_EI,
+                     'soec_ely_stack_capex_EI':soec_ely_stack_capex_EI,
+                     'soec_ely_stack_and_BoP_capex_EI':soec_ely_stack_and_BoP_capex_EI,
                      'battery_LFP_residential_EI':battery_LFP_residential_EI,
                      'battery_LFP_commercial_EI':battery_LFP_commercial_EI,
                      # Steam methane reforming (SMR) and Autothermal Reforming (ATR)
@@ -421,8 +430,8 @@ class GREETData:
         yaml_file.close()
 
 #Adhoc testing
-# if __name__ == '__main__':
-#     test = GREETData()
+if __name__ == '__main__':
+    test = GREETData()
 #     print(test.data)
 
 #NOTE: Runtime ~ 1m16s to fully parse greet

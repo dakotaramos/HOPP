@@ -1,5 +1,6 @@
-NG_combust: 56.2
 NH3_boiler_EI: 0.5
+alk_ely_stack_and_BoP_capex_EI: 0.06810328194709983
+alk_ely_stack_capex_EI: 0.03787833627233622
 atr_NG_PO_ccs_consume: 59.553758933105506
 atr_NG_PO_consume: 70.00178681610647
 atr_NG_ccs_consume: 200.10871547121292
@@ -39,6 +40,7 @@ smr_HEX_eff: 0.9
 smr_NG_PO_ccs_consume: 24.50295261348871
 smr_NG_PO_consume: 10.022332018848383
 smr_NG_ccs_consume: 81.93888486891485
+smr_NG_combust: 56.2
 smr_NG_consume: 35.15241352553791
 smr_NG_supply: 9
 smr_RNG_PO_ccs_consume: -39.92044779395092
@@ -48,6 +50,8 @@ smr_RNG_consume: -24.369842332237294
 smr_ccs_perc_capture: 0.96172541881592
 smr_ccs_steam_prod: 0.0
 smr_steam_prod: 25.660145583754137
+soec_ely_stack_and_BoP_capex_EI: 0.04801288545804755
+soec_ely_stack_capex_EI: 0.01765144489493827
 solar_pv_capex_EI: 35.87693438887993
 steel_CH4_prod: 67.21122926311979
 steel_CO2_prod: 1043.8702438941834
