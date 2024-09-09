@@ -1439,8 +1439,25 @@ def save_energy_flows(
         # call of post_process_simulation() with flags for run_lca()
     # update post_process_simulation() to call run_lca()
 #QUESTIONS:
-    # if cambium_year does not align with 2025:2055:5 intervals should we extrapolate back? ie cambium_year = 2023, extrapolate for 2023 and 2024?
-    # Are capex_EI values over stated (capex EI calculations for every year, do those value include startup / construction capex?)
+    # GREET
+        # validate / confirm GREET values and conversions
+        # need clarification on what fuel_to_grid_curr and fuel_to_grid_future represent, can these be defined through Cambium or GREET?
+        # validate when to use LHV vs HHV values in greet conversions
+        # Are there default configurations for DRI% vs scrap % we should host? ie: 100/0, 75/25, 50/50, 25/75, 0/100?
+    # Cambium:
+        # How to handle cases when cambium_year < 2025
+            # if cambium_year does not align with 2025:2055:5 intervals should we extrapolate back? 
+            # ex: project start = 2019, cambium year = 2024, extrapolate for 2024?
+            # possible solutions:
+                # use closest year data, ie: cambium_year < 2025, use 2025 data
+                # linear or polynomial extrapolation
+    # LCA calculations:
+        # Validate logic for calculating energy_to_electrolyzer_from_grid and setting floor = 0 is accurate
+        # Are capex_EI values over stated (capex EI calculations for every year, do those value include startup / construction capex?)
+        # Under what grid-case should ATR calculations occur?
+        # Why is SMR only in 'grid-only' case
+        # Clarify purpose of * (h2prod_annual_sum /h2prod_life_sum) for ...X_LCA calculations at end of script
+        
 #NOTE: Suedocode:
     # x 1. define conversions
     # x 2. pull greet values (start- pull all, optimal- based on hopp/system config)
@@ -1450,14 +1467,15 @@ def save_energy_flows(
     # x 6. read in hopp data as df (energy to electrolyzer kwh, energy from grid kwh, energy from renewables kwh, total energy kwh)
     # x 7. loop through cambium files, read in data, concat with hopp data, perform calculations based on grid case, append data to lists from 5
     # x 8. after looping through all cambium files, create dataframe with lists from 5/7 (emissions_intensities_df)
-    # 9. calculate endoflife_year = cambium_year + system_life
-    # 10. define lists for interpolated data
+    # x 9. calculate endoflife_year = cambium_year + system_life
+    # x 10. define lists for interpolated data
     # 11. loop through each year between cambium_year and endoflife_year
-        # if year <= max year interpolate values for that year
-        # else append last value of emissions_intensities_df (from 8) to interpolated lists
-    # 12. sum interpolated lists * annual h2 prod sum / h2prod_life_sum to calculate each _LCA value
-    # 13. put all cumulative metrics into dictionary and then dataframe 
+        #NOTE: pending question on extrapolation
+    # x 12. sum interpolated lists * annual h2 prod sum / h2prod_life_sum to calculate each _LCA value
+    # x 13. put all cumulative metrics into dictionary and then dataframe 
     # 14. save as csv
+        # either return df, then save as csv as part of post_process
+        # OR return dictionary, then load as df and save as csv in post_process
     # grid_case put in greenheart_config as input
 
 def run_lca(
@@ -1475,6 +1493,7 @@ def run_lca(
     energy_to_electrolyzer = np.array(electrolyzer_physics_results['power_to_electrolyzer_kw'])                     # total power to the electrolyzer (kW*1hr = kWh)
     energy_to_electrolyzer_from_renewables = np.array(hopp_results['combined_hybrid_power_production_hopp'])        # power to the electrolyzer from renewable sources (kW*1hr = kWh)
     energy_to_electrolyzer_from_grid = energy_to_electrolyzer - energy_to_electrolyzer_from_renewables              # power to the electrolyzer from grid (kW*1hr = kWh)
+    #TODO: Confirm with Masha and/or Greenheart team if this logic for energy_to_electrolyzer_from_grid is sound?
     # Sets energy from grid to zero if negative (some cases where energy to electrolyzer = 0 but energy from renewables > 0, other cases where floating point precision results in negative value from grid)
     energy_to_electrolyzer_from_grid = np.maximum(energy_to_electrolyzer_from_grid,0)
     h2_hourly_prod_kg = np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]'])  # Hourly H2 production (kg/hr * 1hr = kg)
@@ -1494,26 +1513,50 @@ def run_lca(
     smr_Scope2_EI = 'NA'
     smr_Scope1_EI = 'NA'
     smr_total_EI  = 'NA'
+    # atr_Scope3_EI = 'NA'
+    # atr_Scope2_EI = 'NA'
+    # atr_Scope1_EI = 'NA'
+    # atr_total_EI  = 'NA'
     smr_ccs_Scope3_EI = 'NA'
     smr_ccs_Scope2_EI = 'NA'
     smr_ccs_Scope1_EI = 'NA'
     smr_ccs_total_EI  = 'NA'
+    # atr_ccs_Scope3_EI = 'NA'
+    # atr_ccs_Scope2_EI = 'NA'
+    # atr_ccs_Scope1_EI = 'NA'
+    # atr_ccs_total_EI  = 'NA'
     NH3_smr_Scope3_EI = 'NA'
     NH3_smr_Scope2_EI = 'NA'
     NH3_smr_Scope1_EI = 'NA'
     NH3_smr_total_EI  = 'NA'
+    # NH3_atr_Scope3_EI = 'NA'
+    # NH3_atr_Scope2_EI = 'NA'
+    # NH3_atr_Scope1_EI = 'NA'
+    # NH3_atr_total_EI  = 'NA'
     NH3_smr_ccs_Scope3_EI = 'NA'
     NH3_smr_ccs_Scope2_EI = 'NA'
     NH3_smr_ccs_Scope1_EI = 'NA'
     NH3_smr_ccs_total_EI  = 'NA'
+    # NH3_atr_ccs_Scope3_EI = 'NA'
+    # NH3_atr_ccs_Scope2_EI = 'NA'
+    # NH3_atr_ccs_Scope1_EI = 'NA'
+    # NH3_atr_ccs_total_EI  = 'NA'
     steel_smr_Scope3_EI = 'NA'
     steel_smr_Scope2_EI = 'NA'
     steel_smr_Scope1_EI = 'NA'
     steel_smr_total_EI  = 'NA'
+    # steel_atr_Scope3_EI = 'NA'
+    # steel_atr_Scope2_EI = 'NA'
+    # steel_atr_Scope1_EI = 'NA'
+    # steel_atr_total_EI  = 'NA'
     steel_smr_ccs_Scope3_EI = 'NA'
     steel_smr_ccs_Scope2_EI = 'NA'
     steel_smr_ccs_Scope1_EI = 'NA'
     steel_smr_ccs_total_EI  = 'NA'
+    # steel_atr_ccs_Scope3_EI = 'NA'
+    # steel_atr_ccs_Scope2_EI = 'NA'
+    # steel_atr_ccs_Scope1_EI = 'NA'
+    # steel_atr_ccs_total_EI  = 'NA'
     electrolysis_Scope3_EI = 'NA'
     electrolysis_Scope2_EI = 'NA'
     electrolysis_Scope1_EI = 'NA'
@@ -1534,9 +1577,15 @@ def run_lca(
     smr_Scope3_emission_intensity = []
     smr_Scope2_emission_intensity = []
     smr_emission_intensity = []
+    # atr_Scope3_emission_intensity = []
+    # atr_Scope2_emission_intensity = []
+    # atr_emission_intensity = []
     smr_ccs_Scope3_emission_intensity = []
     smr_ccs_Scope2_emission_intensity = []
     smr_ccs_emission_intensity = []
+    # atr_ccs_Scope3_emission_intensity = []
+    # atr_ccs_Scope2_emission_intensity = []
+    # atr_ccs_emission_intensity = []
     NH3_electrolysis_Scope3_emission_intensity = []
     NH3_electrolysis_Scope2_emission_intensity = []
     NH3_electrolysis_emission_intensity = []
@@ -1546,15 +1595,27 @@ def run_lca(
     NH3_smr_Scope3_emission_intensity = []
     NH3_smr_Scope2_emission_intensity = []
     NH3_smr_emission_intensity = []
+    # NH3_atr_Scope3_emission_intensity = []
+    # NH3_atr_Scope2_emission_intensity = []
+    # NH3_atr_emission_intensity = []
     steel_smr_Scope3_emission_intensity = []
     steel_smr_Scope2_emission_intensity = []
     steel_smr_emission_intensity = []
+    # steel_atr_Scope3_emission_intensity = []
+    # steel_atr_Scope2_emission_intensity = []
+    # steel_atr_emission_intensity = []
     NH3_smr_ccs_Scope3_emission_intensity = []
     NH3_smr_ccs_Scope2_emission_intensity = []
     NH3_smr_ccs_emission_intensity = []
+    # NH3_atr_ccs_Scope3_emission_intensity = []
+    # NH3_atr_ccs_Scope2_emission_intensity = []
+    # NH3_atr_ccs_emission_intensity = []
     steel_smr_ccs_Scope3_emission_intensity = []
     steel_smr_ccs_Scope2_emission_intensity = []
     steel_smr_ccs_emission_intensity = []
+    # steel_atr_ccs_Scope3_emission_intensity = []
+    # steel_atr_ccs_Scope2_emission_intensity = []
+    # steel_atr_ccs_emission_intensity = []
     
     ## GREET Data
     # Define conversions
@@ -1768,16 +1829,18 @@ def run_lca(
             electrolysis_Scope3_EI = ely_stack_capex_EI + ((scope3_grid_emissions_annual_sum + (wind_capex_EI * g_to_kg * wind_annual_energy_kwh) + (solar_pv_capex_EI * g_to_kg * solar_pv_annual_energy_kwh) + (grid_imbedded_EI * g_to_kg * grid_annual_sum_MWh * MWh_to_kWh)) / h2prod_annual_sum)
             electrolysis_Scope2_EI = scope2_grid_emissions_annual_sum / h2prod_annual_sum 
             electrolysis_Scope1_EI = 0
-            electrolysis_total_EI  = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI 
-            electrolysis_total_EI_policy_grid = electrolysis_total_EI
+            electrolysis_total_EI  = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
+            #NOTE: electrolysis_total_EI_policy_grid and electrolysis_total_EI_policy_offgrid not used in subsequent calculations 
+            # electrolysis_total_EI_policy_grid = electrolysis_total_EI
             #TODO: Masha, shouldn't electrolysis_total_EI_policy_offgrid still include ely_stack_capex_EI?
-            #NOTE: electrolysis_total_EI_policy_offgrid not used in subsequent calculations
-            electrolysis_total_EI_policy_offgrid = 0 
+            # electrolysis_total_EI_policy_offgrid = 0 
+
             # Calculate ammonia emissions via hybrid grid electrolysis (kg CO2e/kg NH3)
             NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
             NH3_electrolysis_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()
             NH3_electrolysis_Scope1_EI = NH3_boiler_EI
             NH3_electrolysis_total_EI  = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
+
             # Calculate steel emissions via hybrid grid electrolysis (kg CO2e/metric tonne steel)
             steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI * steel_iron_ore_consume  * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)
             steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()  
@@ -1790,10 +1853,10 @@ def run_lca(
             smr_Scope2_EI = smr_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. production (kg-CO2e/MWh)'].mean()
             smr_Scope1_EI = smr_NG_combust * g_to_kg * (smr_NG_consume - smr_steam_prod/smr_HEX_eff)
             smr_total_EI  = smr_Scope1_EI + smr_Scope2_EI + smr_Scope3_EI
-            electrolysis_total_EI_policy_grid = electrolysis_total_EI
+            #NOTE: electrolysis_total_EI_policy_grid and electrolysis_total_EI_policy_offgrid not used in subsequent calculations 
+            # electrolysis_total_EI_policy_grid = electrolysis_total_EI
             #TODO: Masha, shouldn't electrolysis_total_EI_policy_offgrid still include ely_stack_capex_EI?
-            #NOTE: electrolysis_total_EI_policy_offgrid not used in subsequent calculations
-            electrolysis_total_EI_policy_offgrid = 0 
+            # electrolysis_total_EI_policy_offgrid = 0 
             
             # Calculate ammonia emissions via SMR process (kg CO2e/kg NH3)
             NH3_smr_Scope3_EI = (NH3_H2_consume * smr_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
@@ -1850,10 +1913,10 @@ def run_lca(
             electrolysis_Scope2_EI = 0
             electrolysis_Scope1_EI = 0
             electrolysis_total_EI = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
-            electrolysis_total_EI_policy_offgrid = electrolysis_total_EI
+            #NOTE: electrolysis_total_EI_policy_grid and electrolysis_total_EI_policy_offgrid not used in subsequent calculations 
+            # electrolysis_total_EI_policy_offgrid = electrolysis_total_EI
             #TODO: Masha, shouldn't electrolysis_total_EI_policy_grid still include ely_stack_capex_EI?
-            #NOTE: electrolysis_total_EI_policy_grid not used in subsequent calculations
-            electrolysis_total_EI_policy_grid = 0
+            # electrolysis_total_EI_policy_grid = 0
 
             # Calculate ammonia emissions via renewable electrolysis (kg CO2e/kg NH3)
             NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
@@ -1960,9 +2023,10 @@ def run_lca(
 
     # Loop through years between cambium_year and endoflife_year, interpolate values
     for year in range(cambium_year,endoflife_year):
-        # thoughts on logic for extrapolation
+        # thoughts on logic for extrapolation, ie: cambium_year = 2024, cambium 2023 provides data from 2025:2050:5, how to handle 2024 data?
         # if year < min(cambium_data.cambium_years):
-            # logic to extrapolate, likely linear?
+            # logic to extrapolate, linear or polynomial?
+        # if year <= the maximum cambium_year (currently 2050 in Cambium 2023) interpolate the values (copies existing values if year is already in emission_intensities_df['Year'] )
         if year <= max(emission_intensities_df['Year']):
             electrolysis_Scope3_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['electrolysis Scope3 EI (kg CO2e/kg H2)']))
             electrolysis_Scope2_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['electrolysis Scope2 EI (kg CO2e/kg H2)']))
@@ -1990,7 +2054,8 @@ def run_lca(
             NH3_smr_ccs_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['NH3 smr ccs EI (kg CO2e/kg H2)']))
             steel_smr_ccs_Scope3_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['steel smr ccs Scope3 EI (kg CO2e/kg H2)']))
             steel_smr_ccs_Scope2_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['steel smr ccs Scope2 EI (kg CO2e/kg H2)']))
-            steel_smr_ccs_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['steel smr ccs EI (kg CO2e/kg H2)']))  
+            steel_smr_ccs_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['steel smr ccs EI (kg CO2e/kg H2)'])) 
+        # else if year > maximum cambium_year, copy data from maximum year (ie: copy data from 2050) 
         else:
             electrolysis_Scope3_EI_interpolated.append(emission_intensities_df['electrolysis Scope3 EI (kg CO2e/kg H2)'].values[-1:][0])
             electrolysis_Scope2_EI_interpolated.append(emission_intensities_df['electrolysis Scope2 EI (kg CO2e/kg H2)'].values[-1:][0])

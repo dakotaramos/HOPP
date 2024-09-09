@@ -154,21 +154,32 @@ class CambiumData(Resource):
         self.__dict__.update(kwargs)
 
         # Define year to start pulling cambium data from
-        # NOTE: Logic may change to accomodate concepts of technology year, installation period, analysis year, years of operation of a system for LCA analysis (may be handled in LCA code)
-        if year <= 2025:
+        if year < 2030:
             self.cambium_year = 2025
-        elif year <= 2030:
+        elif year < 2035:
             self.cambium_year = 2030
-        elif year <= 2035:
+        elif year < 2040:
             self.cambium_year = 2035
-        elif year <= 2040:
+        elif year < 2045:
             self.cambium_year = 2040
-        elif year <= 2045:
+        elif year < 2050:
             self.cambium_year = 2045
-        elif year <= 2050:
+        else:
             self.cambium_year = 2050
-        elif year > 2050:
-            raise ValueError("The current release of Cambium 2023 provides data up to 2050, 'year' argument must be <= 2050")
+        # if year <= 2025:
+        #     self.cambium_year = 2025
+        # elif year <= 2030:
+        #     self.cambium_year = 2030
+        # elif year <= 2035:
+        #     self.cambium_year = 2035
+        # elif year <= 2040:
+        #     self.cambium_year = 2040
+        # elif year <= 2045:
+        #     self.cambium_year = 2045
+        # elif year <= 2050:
+        #     self.cambium_year = 2050
+        # elif year > 2050:
+        #     raise ValueError("The current release of Cambium 2023 provides data up to 2050, 'year' argument must be <= 2050")
 
         # Define a location attribute for identifying resource files based on geographic resolution of the Cambium Data (GEA region vs Average across Contiguous United States) instead of lat/lon
         if self.location_type == 'GEA Regions 2023':
