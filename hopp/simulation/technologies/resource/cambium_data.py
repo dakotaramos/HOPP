@@ -202,7 +202,9 @@ class CambiumData(Resource):
 
         # Loop through years available in cambium data (2025 through 2050 in 5 year intervals)
         # If a resource file does not already exist in the directory or use_api flag == True, download the data
-        # Append / save the file name to self.resource_files
+        # Append / save the file name to self.resource_file and the cambium_year downloaded to self.cambium_years
+        print("************************************************************")
+        print("Checking for Cambium files and/or calling the Cambium API, this may take up to 1+ minutes")
         for year_to_check in range(self.cambium_year, 2055, 5):
             self.year_to_check = year_to_check
             self.filename = self.filename[:-8] + str(self.year_to_check) + self.filename[-4:]
@@ -210,7 +212,7 @@ class CambiumData(Resource):
                 self.download_resource()
             self.resource_files.append(str(self.filename))
             self.cambium_years.append(self.year_to_check)
-
+        print("Cambium data processing complete")
         # self.format_data()
 
         # logger.info("CambiumData: {}".format(self.filename))

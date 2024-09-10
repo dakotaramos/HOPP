@@ -1438,6 +1438,7 @@ def save_energy_flows(
     # update greenheart_simulation.py 
         # call of post_process_simulation() with flags for run_lca()
     # update post_process_simulation() to call run_lca()
+    # update reference_plant input yamls for with lca_config
 #QUESTIONS:
     # GREET
         # validate / confirm GREET values and conversions
@@ -1476,7 +1477,6 @@ def save_energy_flows(
     # 14. save as csv
         # either return df, then save as csv as part of post_process
         # OR return dictionary, then load as df and save as csv in post_process
-    # grid_case put in greenheart_config as input
 
 def run_lca(
     hopp_results,
@@ -1990,6 +1990,7 @@ def run_lca(
                                             'steel smr ccs EI (kg CO2e/kg H2)': steel_smr_ccs_emission_intensity,
                                             })
     ## Interpolation of emission intensities for years not captured by cambium (cambium 2023 offers 2025-2050 in 5 year increments)
+    # Define end of life based on cambium_year and project lifetime
     endoflife_year = cambium_year + project_lifetime
 
     # Instantiate lists to hold interpolated data
@@ -2025,7 +2026,9 @@ def run_lca(
     for year in range(cambium_year,endoflife_year):
         # thoughts on logic for extrapolation, ie: cambium_year = 2024, cambium 2023 provides data from 2025:2050:5, how to handle 2024 data?
         # if year < min(cambium_data.cambium_years):
-            # logic to extrapolate, linear or polynomial?
+            # logic to extrapolate:
+                # linear or polynomial?
+                # use closest years data, ie: < 2025 == 2025 cambium data
         # if year <= the maximum cambium_year (currently 2050 in Cambium 2023) interpolate the values (copies existing values if year is already in emission_intensities_df['Year'] )
         if year <= max(emission_intensities_df['Year']):
             electrolysis_Scope3_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['electrolysis Scope3 EI (kg CO2e/kg H2)']))

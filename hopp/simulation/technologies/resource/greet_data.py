@@ -35,8 +35,6 @@ class GREETData:
 
         self.year = greet_year
 
-        self.__dict__.update(kwargs)
-
         # Check if path_resource is a directory, if yes define as self.path_resource attribute
         if os.path.isdir(path_resource):
             self.path_resource = path_resource
@@ -69,6 +67,8 @@ class GREETData:
             os.makedirs(os.path.dirname(self.filename))
 
     def preprocess_greet(self):
+        print("************************************************************")
+        print("Processing GREET data, this may take up to 2+ minutes")
         ## Define Conversions for GREET data points
         # Unit conversions
         btu_to_kWh = 0.00029307107                          # 1 btu = 0.00029307107 kWh
@@ -375,6 +375,7 @@ class GREETData:
         yaml_file = open(self.filename, mode="w+")
         yaml.dump(data_dict, yaml_file, default_flow_style=False)
         yaml_file.close()
+        print("GREET processing complete")
 
     def format_data(self):
         """
@@ -387,8 +388,8 @@ class GREETData:
         yaml_file.close()
 
 #Adhoc testing
-if __name__ == '__main__':
-    test = GREETData()
+# if __name__ == '__main__':
+#     test = GREETData()
 #     print(test.data)
 
 #NOTE: Runtime ~ 1m16s to fully parse greet
