@@ -2,6 +2,7 @@ import os
 import os.path
 import yaml
 import copy
+import warnings
 
 import numpy as np
 import numpy_financial as npf
@@ -1470,8 +1471,8 @@ def save_energy_flows(
     # x 8. after looping through all cambium files, create dataframe with lists from 5/7 (emissions_intensities_df)
     # x 9. calculate endoflife_year = cambium_year + system_life
     # x 10. define lists for interpolated data
-    # 11. loop through each year between cambium_year and endoflife_year
-        #NOTE: pending question on extrapolation
+    # x 11. loop through each year between cambium_year and endoflife_year
+        #NOTE: pending question on extrapolation vs using minimum cambium_year data when year < min(cambium_year)
     # x 12. sum interpolated lists * annual h2 prod sum / h2prod_life_sum to calculate each _LCA value
     # x 13. put all cumulative metrics into dictionary and then dataframe 
     # 14. save as csv
@@ -2024,11 +2025,37 @@ def run_lca(
 
     # Loop through years between cambium_year and endoflife_year, interpolate values
     for year in range(cambium_year,endoflife_year):
-        # thoughts on logic for extrapolation, ie: cambium_year = 2024, cambium 2023 provides data from 2025:2050:5, how to handle 2024 data?
-        # if year < min(cambium_data.cambium_years):
-            # logic to extrapolate:
-                # linear or polynomial?
-                # use closest years data, ie: < 2025 == 2025 cambium data
+        # if year < the minimum cambium_year (currently 2025 in Cambium 2023) use data from the minimum year, alert user of possible understating of EI values
+        if year < min(cambium_data.cambium_years):
+            print("****************** WARNING ******************")
+            warnings.warn("Warning, the earliest year available for cambium data is {min_cambium_year}! For all years less than {min_cambium_year}, LCA calculation will use Cambium data from {min_cambium_year}. Thus, calculated emission intensity values for these years may be understated.")
+            electrolysis_Scope3_EI_interpolated.append(emission_intensities_df['electrolysis Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            electrolysis_Scope2_EI_interpolated.append(emission_intensities_df['electrolysis Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            electrolysis_EI_interpolated.append(emission_intensities_df['electrolysis EI (kg CO2e/kg H2)'].values[0][0])
+            smr_Scope3_EI_interpolated.append(emission_intensities_df['smr Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            smr_Scope2_EI_interpolated.append(emission_intensities_df['smr Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            smr_EI_interpolated.append(emission_intensities_df['smr EI (kg CO2e/kg H2)'].values[0][0])
+            smr_ccs_Scope3_EI_interpolated.append(emission_intensities_df['smr ccs Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            smr_ccs_Scope2_EI_interpolated.append(emission_intensities_df['smr ccs Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            smr_ccs_EI_interpolated.append(emission_intensities_df['smr ccs EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_electrolysis_Scope3_EI_interpolated.append(emission_intensities_df['NH3 electrolysis Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_electrolysis_Scope2_EI_interpolated.append(emission_intensities_df['NH3 electrolysis Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_electrolysis_EI_interpolated.append(emission_intensities_df['NH3 electrolysis EI (kg CO2e/kg H2)'].values[0][0])
+            steel_electrolysis_Scope3_EI_interpolated.append(emission_intensities_df['steel electrolysis Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            steel_electrolysis_Scope2_EI_interpolated.append(emission_intensities_df['steel electrolysis Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            steel_electrolysis_EI_interpolated.append(emission_intensities_df['steel electrolysis EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_smr_Scope3_EI_interpolated.append(emission_intensities_df['NH3 smr Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_smr_Scope2_EI_interpolated.append(emission_intensities_df['NH3 smr Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_smr_EI_interpolated.append(emission_intensities_df['NH3 smr EI (kg CO2e/kg H2)'].values[0][0])
+            steel_smr_Scope3_EI_interpolated.append(emission_intensities_df['steel smr Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            steel_smr_Scope2_EI_interpolated.append(emission_intensities_df['steel smr Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            steel_smr_EI_interpolated.append(emission_intensities_df['steel smr EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_smr_ccs_Scope3_EI_interpolated.append(emission_intensities_df['NH3 smr ccs Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_smr_ccs_Scope2_EI_interpolated.append(emission_intensities_df['NH3 smr ccs Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            NH3_smr_ccs_EI_interpolated.append(emission_intensities_df['NH3 smr ccs EI (kg CO2e/kg H2)'].values[0][0])
+            steel_smr_ccs_Scope3_EI_interpolated.append(emission_intensities_df['steel smr ccs Scope3 EI (kg CO2e/kg H2)'].values[0][0])
+            steel_smr_ccs_Scope2_EI_interpolated.append(emission_intensities_df['steel smr ccs Scope2 EI (kg CO2e/kg H2)'].values[0][0])
+            steel_smr_ccs_EI_interpolated.append(emission_intensities_df['steel smr ccs EI (kg CO2e/kg H2)'].values[0][0])
         # if year <= the maximum cambium_year (currently 2050 in Cambium 2023) interpolate the values (copies existing values if year is already in emission_intensities_df['Year'] )
         if year <= max(emission_intensities_df['Year']):
             electrolysis_Scope3_EI_interpolated.append(np.interp(year,emission_intensities_df['Year'],emission_intensities_df['electrolysis Scope3 EI (kg CO2e/kg H2)']))
