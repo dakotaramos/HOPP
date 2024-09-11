@@ -1482,8 +1482,8 @@ def save_energy_flows(
 def run_lca(
     hopp_results,
     electrolyzer_physics_results,
-    greenheart_config,
     hopp_config,
+    greenheart_config
     ):
 
     # Load HOPP Data:  
@@ -2024,11 +2024,14 @@ def run_lca(
     steel_smr_ccs_EI_interpolated = []
 
     # Loop through years between cambium_year and endoflife_year, interpolate values
+    if cambium_year < min(cambium_data.cambium_years):
+        cambium_year_warning_message = "Warning, the earliest year available for cambium data is {min_cambium_year}! For all years less than {min_cambium_year}, LCA calculations will use Cambium data from {min_cambium_year}. Thus, calculated emission intensity values for these years may be understated.".format(min_cambium_year=min(cambium_data.cambium_years))
+        print("****************** WARNING ******************")
+        warnings.warn(cambium_year_warning_message)
+        cambium_warning_flag = True
     for year in range(cambium_year,endoflife_year):
         # if year < the minimum cambium_year (currently 2025 in Cambium 2023) use data from the minimum year, alert user of possible understating of EI values
         if year < min(cambium_data.cambium_years):
-            print("****************** WARNING ******************")
-            warnings.warn("Warning, the earliest year available for cambium data is {min_cambium_year}! For all years less than {min_cambium_year}, LCA calculation will use Cambium data from {min_cambium_year}. Thus, calculated emission intensity values for these years may be understated.")
             electrolysis_Scope3_EI_interpolated.append(emission_intensities_df['electrolysis Scope3 EI (kg CO2e/kg H2)'].values[0][0])
             electrolysis_Scope2_EI_interpolated.append(emission_intensities_df['electrolysis Scope2 EI (kg CO2e/kg H2)'].values[0][0])
             electrolysis_EI_interpolated.append(emission_intensities_df['electrolysis EI (kg CO2e/kg H2)'].values[0][0])
@@ -2145,7 +2148,8 @@ def run_lca(
     steel_smr_ccs_total_LCA = sum(np.asarray(steel_smr_ccs_EI_interpolated) * h2prod_annual_sum) /h2prod_life_sum
 
     # Put all cumulative metrics into a dictionary, then dataframe, then save results to csv
-    lca_dict = {'Total Life Cycle H2 Production (tonnes-H2/MW)': [h2prod_annual_sum],
+    lca_dict = {'Cambium Warning': [cambium_year_warning_message if cambium_warning_flag else "None"],
+                'Total Life Cycle H2 Production (tonnes-H2/MW)': [h2prod_annual_sum],
                 'Grid Total Scope 2 (Combustion) GHG Emissions (tonnes-CO2e/MW)': [scope2_grid_emissions_annual_sum],
                 'Grid Total Scope 3 (Production) GHG Emissions (tonnes-CO2e/MW)': [scope3_grid_emissions_annual_sum],
                 'Grid Total Life Cycle Emissions (tonnes-CO2e/MW)' : [total_grid_emissions_annual_sum],
@@ -2196,7 +2200,45 @@ def run_lca(
                 #'Steel Electrolysis Total GHG Emissions (kg-CO2e/MT steel)':[steel_electrolysis_total_EI]
                 'Steel Electrolysis Total GHG Emissions (kg-CO2e/MT steel)':[steel_electrolysis_total_LCA]
                 }
+
     emissions_and_h2_df = pd.DataFrame(data=lca_dict)
+
+    #TODO: pull site related data and concat to dataframe:
+        # site: = state
+        # year = cambium_year
+        # Turbine size = X MW
+        # Electrolysis case:
+            # Centralized
+            # Distributed
+        # Electrolysis cost case
+            # EC-cost-Mid
+        # policy option:
+            # base
+            # max
+            # no-policy
+        # grid case
+            # grid-only-retail-flat
+            # hybrid-grid-retail-flat
+            # off-grid
+        # renewables case:
+            # No-ren
+            # Wind
+            # Wind+PV+bat
+            # more?
+        # Wind model:
+            # no-wind
+            # pysam
+        # Degradation modeled:
+            # deg-pen
+        # Stack optimized:
+            # stack-op-basic
+        # NPC string
+            # NPC
+        # Num pem clusters:
+        # Storage String:
+            # SM
+        # Storage multiplier
+            # 1.0
 
 # set up function to post-process HOPP results
 def post_process_simulation(
@@ -2220,6 +2262,7 @@ def post_process_simulation(
     plant_design_number,
     incentive_option,
     solver_results=[],
+    run_lca=False,
     show_plots=False,
     save_plots=False,
     verbose=False,
@@ -2238,6 +2281,15 @@ def post_process_simulation(
         "#933C06",
         "#D9531E",
     ]
+    
+    # Run LCA analysis if flag = True
+    if run_lca:
+        lca_df = run_lca(hopp_results = hopp_results,
+                         electrolyzer_physics_results = electrolyzer_physics_results,
+                         hopp_config = hopp_config,
+                         greenheart_config =  greenheart_config
+                        )
+
     # load saved results
 
     # post process results
@@ -2316,6 +2368,13 @@ def post_process_simulation(
             greenheart_config["h2_storage"]["type"],
         )
     )
+    #TODO: clarify file name desired (same approach as above with plant_design_number, incentive_option, etc?)
+    if run_lca:
+        lca_df.to_csv(
+            savepaths[3]
+            + "lca_results.csv"
+        )
+
 
     # create dataframe for saving all the stuff
     greenheart_config["design_scenario"] = design_scenario
@@ -2464,32 +2523,5 @@ def post_process_simulation(
         electrolyzer_physics_results["H2_Results"][key],
         header="# " + key
     )
-
-    print("*******************TESTING******************")
-    print("IN POST_PROCESS_SIMULATION()")
-    # print("power_to_electrolyzer_kw")
-    # print(np.array(electrolyzer_physics_results['power_to_electrolyzer_kw']))
-    # print(np.array(electrolyzer_physics_results['power_to_electrolyzer_kw']).shape)
-    # print("energy_to_electrolyzer_from_renewables")
-    # print(np.array(hopp_results['combined_hybrid_power_production_hopp']))
-    # print(np.array(hopp_results['combined_hybrid_power_production_hopp']).shape)
-    # print(np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]']))
-    # print(np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]']).shape)
-    # energy_to_electrolyzer = np.array(electrolyzer_physics_results['power_to_electrolyzer_kw'])
-    # energy_to_electrolyzer_from_renewables = np.array(hopp_results['combined_hybrid_power_production_hopp'])
-    # energy_to_electrolyzer_from_grid = energy_to_electrolyzer - energy_to_electrolyzer_from_renewables
-    # energy_to_electrolyzer_from_grid = np.maximum(energy_to_electrolyzer_from_grid,0)
-    # h2_hourly_prod_kg = np.array(electrolyzer_physics_results['H2_Results']['Hydrogen Hourly Production [kg/hr]'])
-
-    # electrolyzer_profiles_data_dict = {'Energy to electrolyzer (kWh)': energy_to_electrolyzer,
-    #                                    'Energy from grid (kWh)': energy_to_electrolyzer_from_grid,
-    #                                    'Energy from renewables (kWh)': energy_to_electrolyzer_from_renewables,
-    #                                    'Hydrogen Hourly production (kg)': h2_hourly_prod_kg}
-
-    # electrolyzer_profiles_df = pd.DataFrame(data=electrolyzer_profiles_data_dict)
-    # electrolyzer_profiles_df = electrolyzer_profiles_df.reset_index().rename(columns={'index':'Interval'})
-    # electrolyzer_profiles_df['Interval'] = electrolyzer_profiles_df['Interval']+1
-    # electrolyzer_profiles_df = electrolyzer_profiles_df.set_index('Interval')
-    # print(electrolyzer_profiles_df)
     
     return annual_energy_breakdown, hourly_energy_breakdown
