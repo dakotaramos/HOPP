@@ -18,9 +18,9 @@ class GREETData:
     Args:
         year: (int) version / vintage of GREET to pull data from
         path_resource: directory where to save data files
-        filepath: file path of resource file to load
-        preprocess_greet: Make an API call even if there is an existing data file. Default == False
-        kwargs: additiona keyword arguments
+        filepath: absolute file path of the greet_<year>_processed.yaml to load data from, can be used to manually adjust or add values to yaml
+        preprocess_greet: Flag to preprocess and parse all greet files even if greet_<year>_processed.yaml already exists. Default == False
+        kwargs: additional keyword arguments
 
     """
 
@@ -53,14 +53,12 @@ class GREETData:
         # Check if the download directory exists (HOPP/hopp/simulation/resource_files/greet/<year>), if not make the directory
         self.check_download_dir()
 
-        # If a processed resource file does not already exist or preprocess_greet flag == True, process the data
+        # If a processed resource file does not already exist or preprocess_greet flag == True, process / parse the data from GREET excel docs
         if not os.path.isfile(self.filename) or preprocess_greet:
             self.preprocess_greet()
 
-        # Check if greet_X_processed.yaml exists, if not error, if yes load yaml to dictionary and save to self.data
+        # Check if greet_X_processed.yaml exists, if yes load yaml to dictionary and save to self.data, if not error.
         self.format_data()
-
-        # logger.info("CambiumData: {}".format(self.filename))
 
     def check_download_dir(self):
         if not os.path.isdir(os.path.dirname(self.filename)):
@@ -381,7 +379,7 @@ class GREETData:
         """
         """
         if not os.path.isfile(self.filename):
-            raise FileNotFoundError(f"{self.filename} does not exist. Try `download_resource` first.")
+            raise FileNotFoundError(f"{self.filename} does not exist. Try `preprocess_greet` first or provide the absolute path to the greet_<year>_processed.yaml to load.")
 
         yaml_file = open(self.filename, mode='r')
         self.data = yaml.load(yaml_file, Loader=yaml.SafeLoader)
