@@ -215,8 +215,6 @@ class CambiumData(Resource):
         print("Cambium data processing complete")
         # self.format_data()
 
-        # logger.info("CambiumData: {}".format(self.filename))
-
     def lat_lon_to_gea(self):
         # Cambium API handles mapping of lat/lon to GEA Region, returns the GEA region when query is invalid. Call Cambium API with year not included in their data (2031) to return GEA
         url="{base}?project_uuid={project_uuid}&scenario={scenario}&location_type={location_type}&latitude={latitude}&longitude={longitude}&year={year}&time_type={time_type}&metric_col={metric_col}".format(
