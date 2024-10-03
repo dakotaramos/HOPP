@@ -63,6 +63,8 @@ class CambiumData(Resource):
 
     ## Define Cambium metrics and mappings needed to pull data from the Cambium API for use in LCA calculations
     # Cambium Long-Run Marginal Emissions Rates
+    #NOTE: Only lrmer_co2e_c, lrmer_co2e_p, and lrmer_co2e are used in actual LCA analysis
+    #TODO: remove extra lrmer_X values if not needed in analysis
     lrmer_metric_cols = ['lrmer_co2_c',             # CO2 from direct combustion (kg/MWh)
                          'lrmer_ch4_c',             # CH4 from direct combustion (g/MWh)
                          'lrmer_n2o_c',             # N2O from direct combustion (g/MWh)
