@@ -1612,6 +1612,21 @@ def run_lca(
     greet_data_dict = greet_data.data
 
     #------------------------------------------------------------------------------
+    # Natural Gas
+    #------------------------------------------------------------------------------
+    NG_combust_EI = greet_data_dict['NG_combust_EI']                                                                    # GHG Emissions Intensity of Natural Gas combustion in a utility / industrial large boiler (g CO2e/MJ Natural Gas combusted)
+    NG_supply_EI = greet_data_dict['NG_supply_EI']                                                                      # GHG Emissions Intensity of supplying Natural Gas to processes as a feedstock or process fuel (g CO2e/MJ Natural Gas consumed)
+
+    #------------------------------------------------------------------------------
+    # Water
+    #------------------------------------------------------------------------------
+    H2O_supply_EI = greet_data_dict['H2O_supply_EI']                                                                    # GHG Emissions Intensity of supplying water to processes (kg CO2e/gal H2O consumed)
+    
+    #------------------------------------------------------------------------------
+    # Lime
+    #------------------------------------------------------------------------------
+    lime_supply_EI = greet_data_dict['lime_supply_EI']                                                                  # GHG Emissions Intensity of supplying Lime to processes accounting for limestone mining, lime production, lime processing, and lime transportation assuming 20 miles transport via Diesel engines (kg CO2e/kg lime)
+    #------------------------------------------------------------------------------
     # Renewable infrastructure embedded emission intensities
     #------------------------------------------------------------------------------
     #TODO: add electrolyzer type (PEM, alkaline, SOEC) to lca_config yaml
@@ -1642,8 +1657,6 @@ def run_lca(
     #------------------------------------------------------------------------------
     #TODO: add ATR vs SMR to lca_config and add logic to set properly
     smr_HEX_eff = greet_data_dict['smr_HEX_eff']                                                                        # SMR Heat exchange efficiency (%)
-    smr_NG_supply = greet_data_dict['smr_NG_supply']                                                                    # Natural gas extraction and supply to SMR plant assuming 2% CH4 leakage rate (g CO2e/MJ)
-    smr_NG_combust =  greet_data_dict['smr_NG_combust']                                                                 # SMR Natural gas combustion emission factor (g CO2e/MJ)
     ccs_PO_consume = greet_data_dict['ccs_PO_consume']                                                                  # Power consumption for CCS (kWh/kg CO2)
     smr_ccs_steam_prod = greet_data_dict['smr_ccs_steam_prod']                                                          # SMR Steam exported w/ CCS (MJ/kg H2)
     smr_ccs_perc_capture = greet_data_dict['smr_ccs_perc_capture']                                                      # CCS rate for SMR (%)
@@ -1684,31 +1697,16 @@ def run_lca(
     # Ammonia (NH3)
     #------------------------------------------------------------------------------
     #TODO: add green vs blue vs conventional NH3 production type in lca_config
-    NH3_boiler_EI = greet_data_dict['NH3_boiler_EI']                                                                    # Boiler combustion of methane for Ammonia (kg CO2e/kg NH3)
-    # Values for green NH3
-    if greenheart_config['lca_config']['NH3_type'] == 'Green':
-        NH3_H2_consume = greet_data_dict['green_NH3_H2_consume']                                                        # Green Ammonia production Hydrogen consumption (kg H2/kg NH3)
-        NH3_PO_consume = greet_data_dict['green_NH3_PO_consume']                                                        # Green Ammonia production Total Energy consumption (kWh/kg NH3)
-    
-    # Values for blue NH3
-    elif greenheart_config['lca_config']['NH3_type'] == 'Blue':
-        NH3_H2_consume = greet_data_dict['blue_NH3_H2_consume']                                                         # Blue Ammonia production Hydrogen consumption (kg H2/kg NH3)
-        NH3_PO_consume = greet_data_dict['blue_NH3_PO_consume']                                                         # Blue Ammonia production Total Energy consumption (kWh/kg NH3)
-
-    # Values for conventional NH3
-    elif greenheart_config['lca_config']['NH3_type'] == 'Conventional':
-        NH3_H2_consume = greet_data_dict['conventional_NH3_H2_consume']                                                 # Conventional Ammonia production Hydrogen consumption (kg H2/kg NH3)
-        NH3_PO_consume = greet_data_dict['conventional_NH3_PO_consume']                                                 # Conventional Ammonia production Total Energy consumption (kWh/kg NH3)
+    NH3_NG_consume = greet_data_dict['NH3_NG_consume']                                                                  # Natural gas consumption for combustion in the Haber-Bosch process / Boiler for Ammonia production (MJ/metric tonne NH3) 
+    NH3_H2_consume = greet_data_dict['NH3_H2_consume']                                                                  # Gaseous Hydrogen consumption for Ammonia production, based on chemical balance and is applicable for all NH3 production pathways (kg H2/kg NH3)
+    NH3_electricity_consume = greet_data_dict['NH3_electricity_consume']                                                # Total Electrical Energy consumption for Ammonia production (kWh/kg NH3)
 
     #------------------------------------------------------------------------------
     # Steel
     #------------------------------------------------------------------------------
     # Values agnostic of DRI-EAF config
-    steel_H2O_EI = greet_data_dict['steel_H2O_EI']                                                                      # Water consumption emissions for use in DRI-EAF Steel production (kg CO2e/gal H20) 
-    steel_NG_supply_EI = greet_data_dict['steel_NG_supply_EI']                                                          # Upstream Natural Gas emissions for DRI-EAF Steel production (g CO2e/MJ)
     steel_iron_ore_EI = greet_data_dict['steel_iron_ore_EI']                                                            # Iron ore production emissions for use in DRI-EAF Steel production (kg CO2e/kg iron ore)
     steel_iron_ore_consume = greet_data_dict['steel_iron_ore_consume']                                                  # Iron ore consumption for EAF and LRF Steel production from DRI (metric tonne iron ore/metric tonne steel production)
-    steel_lime_EI = greet_data_dict['steel_lime_EI']                                                                    # Lime production emissions for use in DRI-EAF Steel production (kg CO2e/kg lime)
     steel_lime_consume = greet_data_dict['steel_lime_consume']                                                          # Lime consumption for EAF and LRF Steel production from DRI (metric tonne lime/metric tonne steel production)
 
     # TODO: add DRI-EAF configuration to lca_config and add logic to set properly if desired
@@ -1717,8 +1715,8 @@ def run_lca(
     steel_H2O_consume = greet_data_dict['steel_H2O_consume']                                                            # H2O consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (metric tonne H2O/metric tonne steel production)
     steel_H2_consume = greet_data_dict['steel_H2_consume']                                                              # Hydrogen consumption for DRI-EAF Steel production w/ 83% H2 regardless of scrap (metric tonnes H2/metric tonne steel production)
     steel_NG_consume = greet_data_dict['steel_NG_consume']                                                              # Natural gas consumption for DRI-EAF Steel production (GJ/ton steel)
-    steel_PO_consume = greet_data_dict['steel_PO_consume']                                                              # Total Energy consumption for DRI-EAF Steel production w/ 83% H2 and 0% scrap (MWh/metric tonne steel production)
-    
+    steel_electricity_consume_scope3 = greet_data_dict['steel_electricity_consume_scope3']                              # Scope 3 related Total Electrical Energy consumption for DRI-EAF Steel production accounting for iron ore mining, pelletization, DRI with 83% H2, and EAF + LRF (MWh/metric tonne steel production)
+    steel_electricity_consume_scope2 = greet_data_dict['steel_electricity_consume_scope2']                              # Scope 2 related Total Electrical Energy consumption for DRI-EAF Steel production accounting for DRI with 83% H2 and EAF + LRF (MWh/metric tonne steel production)
     ## Cambium
     # Define cambium_year
     cambium_year = (greenheart_config['project_parameters']['atb_year'] + 5)                                            # NOTE: current hopp logic for LCOH = atb_year + 2yr + install_period(3yrs) = 5 years
@@ -1784,7 +1782,7 @@ def run_lca(
         nuclear_PWR_fraction = 0.655            # % of grid nuclear power from PWR, calculated from USNRC data based on type and rated capacity https://www.nrc.gov/reactors/operating/list-power-reactor-units.html
         nuclear_BWR_fraction = 0.345            # % of grid nuclear power from BWR, calculated from USNRC data based on type and rated capacity https://www.nrc.gov/reactors/operating/list-power-reactor-units.html
         geothermal_binary_fraction = 0.28       # % of grid geothermal power from binary, average from EIA data and NREL Geothermal prospector https://www.eia.gov/todayinenergy/detail.php?id=44576#
-        geothermal_flash_fraction = .72         # % of grid geothermal power from flash, average from EIA data and NREL Geothermal prospector https://www.eia.gov/todayinenergy/detail.php?id=44576#
+        geothermal_flash_fraction = 0.72         # % of grid geothermal power from flash, average from EIA data and NREL Geothermal prospector https://www.eia.gov/todayinenergy/detail.php?id=44576#
 
         grid_imbedded_EI = (generation_annual_nuclear_fraction * nuclear_PWR_fraction * nuclear_PWR_capex_EI) + (generation_annual_nuclear_fraction * nuclear_BWR_fraction * nuclear_BWR_capex_EI) + (generation_annual_coal_oil_fraction * coal_capex_EI) + (generation_annual_gas_fraction * gas_capex_EI) + (generation_annual_bio_fraction * bio_capex_EI)\
                          + (generation_annual_geothermal_fraction * geothermal_binary_fraction * geothermal_binary_capex_EI) + (generation_annual_geothermal_fraction * geothermal_flash_fraction * geothermal_flash_capex_EI) + (generation_annual_hydro_fraction * hydro_capex_EI) + (generation_annual_wind_fraction * wind_capex_EI) + (generation_annual_solar_fraction * solar_pv_capex_EI)\
@@ -1798,51 +1796,53 @@ def run_lca(
             electrolysis_total_EI  = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
 
             # Calculate ammonia emissions via hybrid grid electrolysis (kg CO2e/kg NH3)
-            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
-            NH3_electrolysis_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
-            NH3_electrolysis_Scope1_EI = NH3_boiler_EI
+            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_NG_consume * NG_supply_EI * g_to_kg/MT_to_kg) + (NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            NH3_electrolysis_Scope2_EI = NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
+            NH3_electrolysis_Scope1_EI = (NH3_NG_consume * NG_combust_EI * g_to_kg/MT_to_kg)
             NH3_electrolysis_total_EI  = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
 
             # Calculate steel emissions via hybrid grid electrolysis (kg CO2e/metric tonne steel)
-            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI * steel_iron_ore_consume  * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)
-            steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()  
+            # NOTE: add capex emission intensity (grid_embedded_EI * electricity consumption for EAF)
+            # TODO: question for Masha: 
+            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (lime_supply_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI * steel_iron_ore_consume * MT_to_kg) + (NG_supply_EI * steel_NG_consume) + (steel_electricity_consume_scope3 * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean()) + ((H2O_supply_EI / gal_H2O_to_MT) * steel_H2O_consume)
+            steel_electrolysis_Scope2_EI = steel_electricity_consume_scope2 * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()  
             steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
             steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
 
         if 'grid-only' in grid_case:
             # Calculate SMR emissions. SMR and SMR + CCS are always grid-connected (kg CO2e/kg H2)
             # TODO: Ask Masha why subtracting steam_prod/smr_hex_eff from smr_NG_consume
-            smr_Scope3_EI = (smr_NG_supply * g_to_kg * (smr_NG_consume - smr_steam_prod/smr_HEX_eff)) + (smr_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            smr_Scope3_EI = (NG_supply_EI * g_to_kg * (smr_NG_consume - smr_steam_prod/smr_HEX_eff)) + (smr_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
             smr_Scope2_EI = smr_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
-            smr_Scope1_EI = smr_NG_combust * g_to_kg * (smr_NG_consume - smr_steam_prod/smr_HEX_eff)
+            smr_Scope1_EI = NG_combust_EI * g_to_kg * (smr_NG_consume - smr_steam_prod/smr_HEX_eff)
             smr_total_EI  = smr_Scope1_EI + smr_Scope2_EI + smr_Scope3_EI
             
             # Calculate ammonia emissions via SMR process (kg CO2e/kg NH3)
-            NH3_smr_Scope3_EI = (NH3_H2_consume * smr_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
-            NH3_smr_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
-            NH3_smr_Scope1_EI = NH3_boiler_EI
+            NH3_smr_Scope3_EI = (NH3_H2_consume * smr_total_EI) + (NH3_NG_consume * NG_supply_EI * g_to_kg/MT_to_kg) + (NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            NH3_smr_Scope2_EI = NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
+            NH3_smr_Scope1_EI = (NH3_NG_consume * NG_combust_EI * g_to_kg/MT_to_kg)
             NH3_smr_total_EI = NH3_smr_Scope1_EI + NH3_smr_Scope2_EI + NH3_smr_Scope3_EI   
             
             # Calculate steel emissions via SMR process (kg CO2e/metric tonne steel)
-            steel_smr_Scope3_EI = (smr_total_EI * steel_H2_consume * MT_to_kg) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)
-            steel_smr_Scope2_EI = cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean() * steel_PO_consume 
+            steel_smr_Scope3_EI = (smr_total_EI * steel_H2_consume * MT_to_kg) + (lime_supply_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg) + (NG_supply_EI * steel_NG_consume) + (steel_electricity_consume_scope3 * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean()) + ((H2O_supply_EI / gal_H2O_to_MT) * steel_H2O_consume)
+            steel_smr_Scope2_EI = steel_electricity_consume_scope2 * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
             steel_smr_Scope1_EI = steel_CH4_prod + steel_CO2_prod
             steel_smr_total_EI  = steel_smr_Scope1_EI + steel_smr_Scope2_EI + steel_smr_Scope3_EI
             
             # Calculate SMR + CCS emissions (kg CO2e/kg H2)
-            smr_ccs_Scope3_EI = (smr_NG_supply * g_to_kg * (smr_ccs_NG_consume - smr_steam_prod/smr_HEX_eff)) + (((smr_ccs_PO_consume) * kWh_to_MWh) * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            smr_ccs_Scope3_EI = (NG_supply_EI * g_to_kg * (smr_ccs_NG_consume - smr_steam_prod/smr_HEX_eff)) + (((smr_ccs_PO_consume) * kWh_to_MWh) * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
             smr_ccs_Scope2_EI = (((smr_ccs_PO_consume +  ccs_PO_consume) *  kWh_to_MWh) * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean())
-            smr_ccs_Scope1_EI = (1-smr_ccs_perc_capture) * smr_NG_combust * g_to_kg * (smr_NG_consume_CCS - smr_steam_prod/smr_HEX_eff)
+            smr_ccs_Scope1_EI = (1-smr_ccs_perc_capture) * NG_combust_EI * g_to_kg * (smr_NG_consume_CCS - smr_steam_prod/smr_HEX_eff)
             smr_ccs_total_EI  = smr_ccs_Scope1_EI + smr_ccs_Scope2_EI + smr_ccs_Scope3_EI    
             
             # Calculate ammonia emissions via SMR with CCS process (kg CO2e/kg NH3)
-            NH3_smr_ccs_Scope3_EI = (NH3_H2_consume * smr_ccs_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            NH3_smr_ccs_Scope3_EI = (NH3_H2_consume * smr_ccs_total_EI) + (NH3_NG_consume * NG_supply_EI * g_to_kg/MT_to_kg) + (NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
             NH3_smr_ccs_Scope2_EI = NH3_smr_Scope2_EI
             NH3_smr_ccs_Scope1_EI = NH3_smr_Scope1_EI
             NH3_smr_ccs_total_EI = NH3_smr_ccs_Scope1_EI + NH3_smr_ccs_Scope2_EI + NH3_smr_ccs_Scope3_EI   
             
             # Calculate steel emissions via SMR with CCS process (kg CO2e/metric tonne steel)
-            steel_smr_ccs_Scope3_EI = (smr_ccs_total_EI * steel_H2_consume * MT_to_kg) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume)  + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)  
+            steel_smr_ccs_Scope3_EI = (smr_ccs_total_EI * steel_H2_consume * MT_to_kg) + (lime_supply_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume  * MT_to_kg) + (NG_supply_EI * steel_NG_consume)  + (steel_electricity_consume_scope3 * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean()) + ((H2O_supply_EI / gal_H2O_to_MT) * steel_H2O_consume)  
             steel_smr_ccs_Scope2_EI = steel_smr_Scope2_EI 
             steel_smr_ccs_Scope1_EI = steel_smr_Scope1_EI 
             steel_smr_ccs_total_EI  = steel_smr_ccs_Scope1_EI + steel_smr_ccs_Scope2_EI + steel_smr_ccs_Scope3_EI    
@@ -1854,14 +1854,14 @@ def run_lca(
             electrolysis_total_EI = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
 
             # Calculate ammonia emissions via grid only electrolysis (kg CO2e/kg NH3)
-            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
-            NH3_electrolysis_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
-            NH3_electrolysis_Scope1_EI = NH3_boiler_EI
+            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_NG_consume * NG_supply_EI * g_to_kg/MT_to_kg) + (NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            NH3_electrolysis_Scope2_EI = NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
+            NH3_electrolysis_Scope1_EI = (NH3_NG_consume * NG_combust_EI * g_to_kg/MT_to_kg)
             NH3_electrolysis_total_EI  = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
 
             # Calculate steel emissions via grid only electrolysis (kg CO2e/metric tonne steel)
-            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)  
-            steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()  
+            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (lime_supply_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI  * steel_iron_ore_consume * MT_to_kg) + (NG_supply_EI * steel_NG_consume) + (steel_electricity_consume_scope3 * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean()) + ((H2O_supply_EI / gal_H2O_to_MT) * steel_H2O_consume)  
+            steel_electrolysis_Scope2_EI = steel_electricity_consume_scope2 * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()  
             steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
             steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
         if 'off-grid' in grid_case:
@@ -1872,14 +1872,14 @@ def run_lca(
             electrolysis_total_EI = electrolysis_Scope1_EI + electrolysis_Scope2_EI + electrolysis_Scope3_EI
 
             # Calculate ammonia emissions via renewable electrolysis (kg CO2e/kg NH3)
-            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
-            NH3_electrolysis_Scope2_EI = NH3_PO_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
-            NH3_electrolysis_Scope1_EI = NH3_boiler_EI
+            NH3_electrolysis_Scope3_EI = (NH3_H2_consume * electrolysis_total_EI) + (NH3_NG_consume * NG_supply_EI * g_to_kg/MT_to_kg) + (NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean())
+            NH3_electrolysis_Scope2_EI = NH3_electricity_consume * kWh_to_MWh * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean()
+            NH3_electrolysis_Scope1_EI = (NH3_NG_consume * NG_combust_EI * g_to_kg/MT_to_kg)
             NH3_electrolysis_total_EI = NH3_electrolysis_Scope1_EI + NH3_electrolysis_Scope2_EI + NH3_electrolysis_Scope3_EI
 
             # Calculate steel emissions via renewable electrolysis (kg CO2e/metric tonne steel)
-            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (steel_lime_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI * steel_iron_ore_consume * MT_to_kg) + (steel_NG_supply_EI * steel_NG_consume) + (cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean() * steel_PO_consume) + ((steel_H2O_EI / gal_H2O_to_MT) * steel_H2O_consume)
-            steel_electrolysis_Scope2_EI = steel_PO_consume * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean() 
+            steel_electrolysis_Scope3_EI = (steel_H2_consume * MT_to_kg * electrolysis_total_EI) + (lime_supply_EI * steel_lime_consume * MT_to_kg) + (steel_iron_ore_EI * steel_iron_ore_consume * MT_to_kg) + (NG_supply_EI * steel_NG_consume) + (steel_electricity_consume_scope3 * cambium_data['LRMER CO2 equiv. combustion (kg-CO2e/MWh)'].mean()) + ((H2O_supply_EI / gal_H2O_to_MT) * steel_H2O_consume)
+            steel_electrolysis_Scope2_EI = steel_electricity_consume_scope2 * cambium_data['LRMER CO2 equiv. precombustion (kg-CO2e/MWh)'].mean() 
             steel_electrolysis_Scope1_EI = steel_CH4_prod + steel_CO2_prod
             steel_electrolysis_total_EI  = steel_electrolysis_Scope1_EI + steel_electrolysis_Scope2_EI + steel_electrolysis_Scope3_EI
         
