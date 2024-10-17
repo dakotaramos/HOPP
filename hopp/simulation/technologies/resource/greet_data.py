@@ -71,7 +71,7 @@ class GREETData:
 
     def preprocess_greet(self):
         print("************************************************************")
-        print("Processing GREET data, this may take up to 2+ minutes")
+        print("Processing GREET data, this may take up to 1+ minutes")
         ## Define Conversions for GREET data
         # Unit conversions
         btu_to_kWh = 0.0002931                              # 1 btu = 0.00029307107 kWh
@@ -344,9 +344,9 @@ class GREETData:
         yaml_file.close()
 
 #Adhoc testing
-if __name__ == '__main__':
-    test = GREETData()
-    print(test.data)
+# if __name__ == '__main__':
+#     test = GREETData()
+#     print(test.data)
 
 #NOTE: Runtime ~ 1m to fully parse greet
 #NOTE: Runtime <2s with greet preprocessed (load yaml to dict)
